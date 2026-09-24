@@ -248,7 +248,7 @@ def get_node_level(label: str, name: str, props: dict) -> int:
     return 4
 
 # 2D Attack Graph Visualization with Vis.js (Tactical Cybersecurity Console)
-def render_attack_graph(nodes_dict, edges, nodes_meta=None):
+def render_attack_graph(nodes_dict, edges, nodes_meta=None, graph_height=720):
     theme = {
         "GitHubRepo": {
             "bg": "#2E1065", "border": "#A855F7", "highlight": "#9333EA",
@@ -462,6 +462,10 @@ def render_attack_graph(nodes_dict, edges, nodes_meta=None):
     edges_json = json.dumps(vis_edges)
     meta_json = json.dumps(nodes_client_meta)
     
+    wrapper_h = max(380, int(graph_height))
+    hud_h = min(220, max(135, int(wrapper_h * 0.28)))
+    network_h = max(220, wrapper_h - hud_h - 10)
+
     html = f"""
     <!DOCTYPE html>
     <html>
@@ -478,7 +482,7 @@ def render_attack_graph(nodes_dict, edges, nodes_meta=None):
         #graph-wrapper {{
           position: relative;
           width: 100%;
-          height: 700px;
+          height: {wrapper_h}px;
           border: 1px solid #1E293B;
           border-radius: 10px;
           background: radial-gradient(circle at 50% 50%, #0F172A 0%, #070B14 100%);
@@ -486,11 +490,13 @@ def render_attack_graph(nodes_dict, edges, nodes_meta=None):
           box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
           display: flex;
           flex-direction: column;
+          transition: height 0.2s ease;
         }}
         #network {{
           width: 100%;
-          height: 495px;
+          height: {network_h}px;
           background: transparent;
+          transition: height 0.2s ease;
         }}
         .toolbar {{
           position: absolute;
@@ -535,7 +541,7 @@ def render_attack_graph(nodes_dict, edges, nodes_meta=None):
           margin: 0 2px;
         }}
         .tactical-hud {{
-          height: 205px;
+          height: {hud_h}px;
           background: #070B14;
           border-top: 1px solid #1E293B;
           padding: 10px 14px;
@@ -655,6 +661,8 @@ def render_attack_graph(nodes_dict, edges, nodes_meta=None):
           <button class="tool-btn" onclick="network.moveTo({{scale: network.getScale() * 0.7}})">🔍 -</button>
           <button class="tool-btn" onclick="network.fit({{animation: {{duration: 400}}}})">🎯 Fit</button>
           <button class="tool-btn" id="freeze-btn" onclick="togglePhysics()">⏸️ Freeze</button>
+          <span class="divider"></span>
+          <button class="tool-btn" id="fs-btn" onclick="toggleFullscreen()">⛶ Fullscreen</button>
         </div>
         <div id="network"></div>
         <div id="hud-panel" class="tactical-hud">
@@ -852,16 +860,147 @@ def render_attack_graph(nodes_dict, edges, nodes_meta=None):
           document.getElementById('hud-content').innerHTML = '<div class="hud-empty"><span style="font-size: 20px;">🎯</span><span>Click any node in the attack graph above to inspect technical telemetry, attack vectors, and lateral blast radius.</span></div>';
           document.getElementById('hud-subtitle').innerText = 'Click any graph node to inspect telemetry & attack vectors';
         }}
+
+        function toggleFullscreen() {{
+          var el = document.getElementById('graph-wrapper');
+          if (!document.fullscreenElement && !document.webkitFullscreenElement) {{
+            if (el.requestFullscreen) {{ el.requestFullscreen(); }}
+            else if (el.webkitRequestFullscreen) {{ el.webkitRequestFullscreen(); }}
+            else if (el.msRequestFullscreen) {{ el.msRequestFullscreen(); }}
+          }} else {{
+            if (document.exitFullscreen) {{ document.exitFullscreen(); }}
+            else if (document.webkitExitFullscreen) {{ document.webkitExitFullscreen(); }}
+          }}
+        }}
+
+        function handleFSEvent() {{
+          var isFull = !!(document.fullscreenElement || document.webkitFullscreenElement);
+          var fsBtn = document.getElementById('fs-btn');
+          var wrapper = document.getElementById('graph-wrapper');
+          var net = document.getElementById('network');
+          if (isFull) {{
+            if (fsBtn) fsBtn.innerText = '✖ Exit';
+            wrapper.style.height = '100vh';
+            net.style.height = 'calc(100vh - 220px)';
+          }} else {{
+            if (fsBtn) fsBtn.innerText = '⛶ Fullscreen';
+            wrapper.style.height = '{wrapper_h}px';
+            net.style.height = '{network_h}px';
+          }}
+          setTimeout(function() {{ network.fit({{ animation: {{ duration: 300 }} }}); }}, 120);
+        }}
+
+        document.addEventListener('fullscreenchange', handleFSEvent);
+        document.addEventListener('webkitfullscreenchange', handleFSEvent);
       </script>
     </body>
     </html>
     """
-    components.html(html, height=720)
+    components.html(html, height=wrapper_h + 20)
 
-# Layout
-col1, col2 = st.columns([1, 1])
+# Layout & Window Dimensions Controls
+with st.expander("📐 Viewport & Window Dimensions (Layout Split • Graph Canvas Height • Report Viewport)", expanded=True):
+    ctrl_col1, ctrl_col2, ctrl_col3 = st.columns([1.5, 1.2, 1.2])
+    with ctrl_col1:
+        layout_mode = st.selectbox(
+            "📐 Viewport Layout / Split Mode:",
+            [
+                "⚖️ Balanced (50% Report / 50% Graph)",
+                "🕸️ Wide Graph (35% Report / 65% Graph)",
+                "📋 Wide Report (65% Report / 35% Graph)",
+                "🪐 Max Graph (20% Report / 80% Graph)",
+                "📑 Max Report (80% Report / 20% Graph)",
+                "🎯 Custom Split Ratio (%)",
+                "📚 Stacked: Graph on Top (100%), Report Below",
+                "📚 Stacked: Report on Top (100%), Graph Below"
+            ],
+            index=0,
+            key="layout_mode_select"
+        )
+        if layout_mode == "🎯 Custom Split Ratio (%)":
+            custom_ratio = st.slider("Report Width (%)", 15, 85, 50, 5, key="custom_width_split")
+            col_report_width = custom_ratio
+            col_graph_width = 100 - custom_ratio
+        elif layout_mode == "🕸️ Wide Graph (35% Report / 65% Graph)":
+            col_report_width, col_graph_width = 35, 65
+        elif layout_mode == "📋 Wide Report (65% Report / 35% Graph)":
+            col_report_width, col_graph_width = 65, 35
+        elif layout_mode == "🪐 Max Graph (20% Report / 80% Graph)":
+            col_report_width, col_graph_width = 20, 80
+        elif layout_mode == "📑 Max Report (80% Report / 20% Graph)":
+            col_report_width, col_graph_width = 80, 20
+        else:
+            col_report_width, col_graph_width = 50, 50
 
-with col1:
+        is_stacked = "Stacked" in layout_mode
+        stacked_order = "graph_first" if "Graph on Top" in layout_mode else "report_first"
+
+    with ctrl_col2:
+        graph_height = st.slider(
+            "🕸️ Graph Window Height (px):",
+            min_value=400,
+            max_value=1400,
+            value=720,
+            step=40,
+            help="Resize the interactive attack graph canvas.",
+            key="graph_height_slider"
+        )
+        btn_c1, btn_c2, btn_c3, btn_c4 = st.columns(4)
+        if btn_c1.button("500p", help="Compact 500px"):
+            st.session_state["graph_height_slider"] = 500
+            st.rerun()
+        if btn_c2.button("720p", help="Standard 720px"):
+            st.session_state["graph_height_slider"] = 720
+            st.rerun()
+        if btn_c3.button("960p", help="Expanded 960px"):
+            st.session_state["graph_height_slider"] = 960
+            st.rerun()
+        if btn_c4.button("1200p", help="Cinema 1200px"):
+            st.session_state["graph_height_slider"] = 1200
+            st.rerun()
+
+    with ctrl_col3:
+        report_scroll_choice = st.selectbox(
+            "📋 Report Window View:",
+            ["📜 Scrollable Window (Fixed Height)", "📄 Auto-Expand (Full Length)"],
+            index=0,
+            key="report_scroll_choice",
+            help="Choose whether reports scroll inside a bounded card or expand down the page."
+        )
+        if report_scroll_choice == "📜 Scrollable Window (Fixed Height)":
+            sync_h = st.checkbox("🔗 Match Graph Height", value=True, key="sync_report_graph_height")
+            if sync_h:
+                report_height = graph_height
+                st.caption(f"Locked to graph height: `{report_height}px`")
+            else:
+                report_height = st.slider(
+                    "📋 Report Window Height (px):",
+                    min_value=350,
+                    max_value=1400,
+                    value=720,
+                    step=40,
+                    key="report_height_slider"
+                )
+        else:
+            report_height = None
+            st.caption("Report expands naturally without vertical bounds.")
+
+# Render Containers according to selected layout
+if is_stacked:
+    if stacked_order == "graph_first":
+        container_graph = st.container()
+        st.markdown("---")
+        container_report = st.container()
+    else:
+        container_report = st.container()
+        st.markdown("---")
+        container_graph = st.container()
+else:
+    col1, col2 = st.columns([col_report_width, col_graph_width])
+    container_report = col1
+    container_graph = col2
+
+with container_report:
     tab_query, tab_sbom, tab_benchmark = st.tabs(["🕵️ Threat Query", "📦 GitHub & SBOM Supply Chain", "📊 Empirical Benchmark"])
     
     with tab_query:
@@ -900,18 +1039,40 @@ with col1:
                 else:
                     st.success(f"🚀 **Live Generation** (Neo4j Full-Text Traversal: {traversal_ms}ms • Streaming via Gemini)")
 
-                # Token-by-token live streaming
+                # Token-by-token live streaming inside configured window
                 stream_gen = synthesize_technical_report_stream(facts, user_query, client=client)
-                answer = st.write_stream(stream_gen)
+                if report_height is not None:
+                    rep_box = st.container(height=report_height)
+                    with rep_box:
+                        answer = st.write_stream(stream_gen)
+                else:
+                    answer = st.write_stream(stream_gen)
                 st.session_state["answer"] = answer
 
         elif "answer" in st.session_state:
             st.markdown("### 📋 SOC Threat Intelligence Report")
-            if st.session_state.get("is_cached"):
-                st.info(f"⚡ **Cached Report** (0 LLM API tokens consumed)")
+            col_rep_meta, col_rep_act = st.columns([1.2, 1])
+            with col_rep_meta:
+                if st.session_state.get("is_cached"):
+                    st.info(f"⚡ **Cached Report** (0 LLM API tokens consumed)")
+                else:
+                    st.success(f"⚡ **Neo4j Graph Traversal:** {st.session_state.get('traversal_ms', 12)}ms")
+            with col_rep_act:
+                st.download_button(
+                    "⬇️ Download Markdown Advisory",
+                    data=st.session_state["answer"],
+                    file_name="CISA_CTI_Advisory_Report.md",
+                    mime="text/markdown",
+                    use_container_width=True
+                )
+
+            if report_height is not None:
+                rep_box = st.container(height=report_height)
+                with rep_box:
+                    st.markdown(st.session_state["answer"])
             else:
-                st.success(f"⚡ **Neo4j Graph Traversal:** {st.session_state.get('traversal_ms', 12)}ms")
-            st.markdown(st.session_state["answer"])
+                st.markdown(st.session_state["answer"])
+
             with st.expander("🔍 Discovered Attack Graph Paths (Evidence)"):
                 for f in st.session_state["facts"]:
                     st.write(f)
@@ -1018,7 +1179,12 @@ with col1:
                         
                 if "repo_ai_report" in st.session_state and st.session_state["repo_ai_report"]:
                     with st.expander("📋 SOC Threat Intelligence & Remediation Roadmap (AI-Generated)", expanded=True):
-                        st.markdown(st.session_state["repo_ai_report"])
+                        if report_height is not None:
+                            sbom_rep_box = st.container(height=report_height)
+                            with sbom_rep_box:
+                                st.markdown(st.session_state["repo_ai_report"])
+                        else:
+                            st.markdown(st.session_state["repo_ai_report"])
                         
                 st.success("✅ Interactive Attack Graph on the right updated with the repository supply chain topology!")
 
@@ -1165,7 +1331,7 @@ with col1:
         else:
             st.info("Benchmark is currently running in the background. Refresh this page in a moment to view the live charts!")
 
-with col2:
+with container_graph:
     st.subheader("🕸️ Interactive Attack Graph & Blast Radius")
     st.markdown("""
     <div style="display: flex; flex-wrap: wrap; gap: 6px; font-size: 11px; margin-bottom: 10px; font-weight: 600;">
@@ -1180,7 +1346,7 @@ with col2:
     </div>
     """, unsafe_allow_html=True)
     if "edges" in st.session_state and st.session_state["edges"]:
-        st.caption(f"Showing attack path for: {', '.join(st.session_state.get('entities', []))} • (Click any node to inspect in HUD)")
-        render_attack_graph(st.session_state["nodes_dict"], st.session_state["edges"], st.session_state.get("nodes_meta"))
+        st.caption(f"Showing attack path for: {', '.join(st.session_state.get('entities', []))} • (Click any node to inspect in HUD • Window: {graph_height}px)")
+        render_attack_graph(st.session_state["nodes_dict"], st.session_state["edges"], st.session_state.get("nodes_meta"), graph_height=graph_height)
     else:
         st.info("Execute a threat scenario on the left to visualize the attack path and lateral movement graph!")
