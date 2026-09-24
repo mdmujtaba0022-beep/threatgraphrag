@@ -101,7 +101,7 @@ USER QUERY:
 
 OUTPUT STRUCTURE (Follow this exact GitHub-flavored Markdown structure):
 
-# 🚨 CTI ADVISORY: {query[:70]}
+### 🚨 CTI ADVISORY: {query[:75]}
 **Advisory Tracking:** `CISA-AA26-0924-CTI` | **TLP Classification:** `TLP:AMBER+STRICT`  
 **Threat Level:** `CRITICAL (CVSS 10.0 / EPSS 97.4%)` | **Target Scope:** Production Cloud Infrastructure  
 
@@ -211,7 +211,7 @@ USER QUERY:
 {query}
 
 OUTPUT STRUCTURE:
-# 🚨 CTI ADVISORY: {query[:70]}
+### 🚨 CTI ADVISORY: {query[:75]}
 **Advisory Tracking:** `CISA-AA26-0924-CTI` | **TLP Classification:** `TLP:AMBER+STRICT`  
 **Threat Level:** `CRITICAL (CVSS 10.0 / EPSS 97.4%)` | **Target Scope:** Production Cloud Infrastructure  
 
@@ -447,7 +447,7 @@ def generate_deterministic_report(facts: List[str], query: str) -> str:
     vuln_patch = vuln_info["patch_version"]
     vuln_sha256 = vuln_info["sha256"]
 
-    return f"""# 🚨 CTI ADVISORY: {actor_name} Multi-Hop Attack Path
+    return f"""### 🚨 CTI ADVISORY: {actor_name} Multi-Hop Attack Path
 **Advisory Tracking:** `CISA-AA26-0924-CTI` | **TLP Classification:** `TLP:AMBER+STRICT`  
 **Threat Severity:** `CRITICAL (CVSS {vuln_cvss} | EPSS {vuln_epss})`  
 **CISA KEV Status:** `{vuln_cisa}`  

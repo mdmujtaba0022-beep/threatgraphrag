@@ -586,11 +586,15 @@ def render_attack_graph(nodes_dict, edges, nodes_meta=None, graph_height=720):
           <button class="tool-btn" id="btn-ud" onclick="setHierarchy('UD')">🔻 Kill-Chain (UD)</button>
           <button class="tool-btn" id="btn-force" onclick="setForceDirected()">🪐 Force</button>
           <button class="tool-btn" id="freeze-btn" onclick="togglePhysics()">⏸️ Freeze</button>
+          <button class="tool-btn" onclick="downloadGraphPNG()" title="Download High-Res Attack Graph as PNG Image">📷 Export PNG</button>
+          <button class="tool-btn" onclick="downloadGraphJSON()" title="Download Topology Graph Data as JSON">📥 Export JSON</button>
         </div>
         <div class="zoom-toolbar">
           <button class="zoom-btn" onclick="network.moveTo({{scale: network.getScale() * 1.35}})" title="Zoom In (+)">➕</button>
           <button class="zoom-btn" onclick="network.moveTo({{scale: network.getScale() * 0.72}})" title="Zoom Out (-)">➖</button>
           <button class="zoom-btn" onclick="network.fit({{animation: {{duration: 350}}}})" title="Reset View (🎯)">🎯</button>
+          <button class="zoom-btn" onclick="downloadGraphPNG()" title="Download Graph Image (PNG)">📷</button>
+          <button class="zoom-btn" onclick="downloadGraphJSON()" title="Download Graph JSON (📥)">📥</button>
           <button class="zoom-btn" id="fs-btn" onclick="toggleFullscreen()" title="Fullscreen Toggle (⛶)">⛶</button>
         </div>
         <div id="network"></div>
@@ -788,6 +792,47 @@ def render_attack_graph(nodes_dict, edges, nodes_meta=None, graph_height=720):
         function resetHUD() {{
           document.getElementById('hud-content').innerHTML = '<div class="hud-empty"><span style="font-size: 20px;">🎯</span><span>Click any node in the attack graph above to inspect technical telemetry, attack vectors, and lateral blast radius.</span></div>';
           document.getElementById('hud-subtitle').innerText = 'Click any graph node to inspect telemetry & attack vectors';
+        }}
+
+        function downloadGraphPNG() {{
+          try {{
+            var canvas = document.querySelector('#network canvas');
+            if (!canvas) return;
+            var offscreen = document.createElement('canvas');
+            offscreen.width = canvas.width;
+            offscreen.height = canvas.height;
+            var ctx = offscreen.getContext('2d');
+            ctx.fillStyle = '#0B1120';
+            ctx.fillRect(0, 0, offscreen.width, offscreen.height);
+            ctx.drawImage(canvas, 0, 0);
+            var a = document.createElement('a');
+            a.download = 'ThreatGraphRAG_Attack_Topology.png';
+            a.href = offscreen.toDataURL('image/png');
+            a.click();
+          }} catch(err) {{
+            console.error('Export graph error:', err);
+          }}
+        }}
+
+        function downloadGraphJSON() {{
+          try {{
+            var exportObj = {{
+              title: 'ThreatGraphRAG Attack Graph Topology',
+              exportedAt: new Date().toISOString(),
+              nodes: visNodes,
+              edges: visEdges,
+              metadata: nodesMeta
+            }};
+            var blob = new Blob([JSON.stringify(exportObj, null, 2)], {{ type: 'application/json' }});
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.download = 'ThreatGraphRAG_Attack_Topology.json';
+            a.href = url;
+            a.click();
+            URL.revokeObjectURL(url);
+          }} catch(err) {{
+            console.error('Export JSON error:', err);
+          }}
         }}
 
         function toggleFullscreen() {{
@@ -997,7 +1042,43 @@ st.markdown("""
 .report-fullscreen-active .report-fullscreen-icon:hover {
   background: #B91C1C !important;
   border-color: #F87171 !important;
-  transform: scale(1.05) !important;
+}
+
+/* Controlled Font Size for CTI Advisory & Threat Headings */
+.stMarkdown h1, .stMarkdown h2, .stMarkdown h3 {
+  letter-spacing: -0.2px !important;
+}
+
+div[data-testid="stMarkdownContainer"] h1,
+div[data-testid="stMarkdownContainer"] > h1:first-child,
+div[data-testid="stMarkdownContainer"] > h2:first-child,
+div[data-testid="stMarkdownContainer"] > h3:first-child,
+.cti-advisory-title {
+  font-size: 1.18rem !important;
+  font-weight: 700 !important;
+  line-height: 1.38 !important;
+  color: #38BDF8 !important;
+  margin-top: 6px !important;
+  margin-bottom: 8px !important;
+  border-bottom: 1px solid #1E293B !important;
+  padding-bottom: 6px !important;
+  word-break: break-word !important;
+}
+
+div[data-testid="stMarkdownContainer"] h2 {
+  font-size: 1.10rem !important;
+  font-weight: 600 !important;
+  color: #93C5FD !important;
+  margin-top: 10px !important;
+  margin-bottom: 6px !important;
+}
+
+div[data-testid="stMarkdownContainer"] h3 {
+  font-size: 1.02rem !important;
+  font-weight: 600 !important;
+  color: #E2E8F0 !important;
+  margin-top: 10px !important;
+  margin-bottom: 6px !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -1137,10 +1218,36 @@ components.html("""
     }
   }
 
-  setTimeout(setupBoundarySplitter, 200);
-  setTimeout(setupBoundarySplitter, 600);
+  function enforceCTISizes() {
+    try {
+      const pDoc = window.parent.document;
+      if (!pDoc) return;
+      pDoc.querySelectorAll('h1, h2, h3').forEach(function(el) {
+        if (el.textContent && el.textContent.includes('CTI ADVISORY')) {
+          el.style.setProperty('font-size', '1.18rem', 'important');
+          el.style.setProperty('line-height', '1.38', 'important');
+          el.style.setProperty('color', '#38BDF8', 'important');
+          el.style.setProperty('font-weight', '700', 'important');
+          el.style.setProperty('border-bottom', '1px solid #1E293B', 'important');
+          el.style.setProperty('padding-bottom', '6px', 'important');
+          el.style.setProperty('margin-top', '6px', 'important');
+          el.style.setProperty('margin-bottom', '8px', 'important');
+          el.style.setProperty('word-break', 'break-word', 'important');
+        }
+      });
+    } catch(e) {}
+  }
+
+  function handlePageUpdates() {
+    setupBoundarySplitter();
+    enforceCTISizes();
+  }
+
+  setTimeout(handlePageUpdates, 200);
+  setTimeout(handlePageUpdates, 600);
+  setTimeout(handlePageUpdates, 1500);
   try {
-    const observer = new MutationObserver(setupBoundarySplitter);
+    const observer = new MutationObserver(handlePageUpdates);
     observer.observe(window.parent.document.body, { childList: true, subtree: true });
   } catch(e) {}
 
@@ -1355,6 +1462,27 @@ with container_report:
                     answer = st.write_stream(stream_gen)
                     st.session_state["answer"] = answer
 
+                    st.markdown("<div style='height:8px;'></div>", unsafe_allow_html=True)
+                    col_live_dl1, col_live_dl2 = st.columns(2)
+                    with col_live_dl1:
+                        st.download_button(
+                            "⬇️ Download Advisory (.md)",
+                            data=answer,
+                            file_name="CISA_CTI_Advisory_Report.md",
+                            mime="text/markdown",
+                            use_container_width=True,
+                            key="dl_live_md"
+                        )
+                    with col_live_dl2:
+                        st.download_button(
+                            "📄 Download Advisory (.txt)",
+                            data=answer,
+                            file_name="CISA_CTI_Advisory_Report.txt",
+                            mime="text/plain",
+                            use_container_width=True,
+                            key="dl_live_txt"
+                        )
+
         elif "answer" in st.session_state:
             rep_container = st.container()
             with rep_container:
@@ -1375,19 +1503,29 @@ with container_report:
                     m3.metric("Attack Path Hops", len(st.session_state.get("edges", [])))
                     m4.metric("Crown Jewels at Risk", len(metrics.get("crown_jewels_at_risk", [])))
                 
-                col_rep_meta, col_rep_act = st.columns([1.2, 1])
+                col_rep_meta, col_rep_md, col_rep_txt = st.columns([1.2, 0.9, 0.9])
                 with col_rep_meta:
                     if st.session_state.get("is_cached"):
                         st.info(f"⚡ **Cached Report** (0 LLM API tokens consumed)")
                     else:
                         st.success(f"⚡ **Neo4j Graph Traversal:** {st.session_state.get('traversal_ms', 12)}ms")
-                with col_rep_act:
+                with col_rep_md:
                     st.download_button(
-                        "⬇️ Download Markdown Advisory",
+                        "⬇️ Download (.md)",
                         data=st.session_state["answer"],
                         file_name="CISA_CTI_Advisory_Report.md",
                         mime="text/markdown",
-                        use_container_width=True
+                        use_container_width=True,
+                        key="dl_cached_md"
+                    )
+                with col_rep_txt:
+                    st.download_button(
+                        "📄 Download (.txt)",
+                        data=st.session_state["answer"],
+                        file_name="CISA_CTI_Advisory_Report.txt",
+                        mime="text/plain",
+                        use_container_width=True,
+                        key="dl_cached_txt"
                     )
 
                 st.markdown(st.session_state["answer"])
@@ -1507,6 +1645,25 @@ with container_report:
                         </div>
                         """, unsafe_allow_html=True)
                         st.markdown(st.session_state["repo_ai_report"])
+                        col_sb_dl1, col_sb_dl2 = st.columns(2)
+                        with col_sb_dl1:
+                            st.download_button(
+                                "⬇️ Download SBOM Advisory (.md)",
+                                data=st.session_state["repo_ai_report"],
+                                file_name=f"SupplyChain_Security_Audit_{res['repository'].replace('/', '_')}.md",
+                                mime="text/markdown",
+                                use_container_width=True,
+                                key="dl_repo_ai_md"
+                            )
+                        with col_sb_dl2:
+                            st.download_button(
+                                "📄 Download SBOM Advisory (.txt)",
+                                data=st.session_state["repo_ai_report"],
+                                file_name=f"SupplyChain_Security_Audit_{res['repository'].replace('/', '_')}.txt",
+                                mime="text/plain",
+                                use_container_width=True,
+                                key="dl_repo_ai_txt"
+                            )
                         
                 st.success("✅ Interactive Attack Graph on the right updated with the repository supply chain topology!")
 
@@ -1654,7 +1811,28 @@ with container_report:
             st.info("Benchmark is currently running in the background. Refresh this page in a moment to view the live charts!")
 
 with container_graph:
-    st.subheader("🕸️ Interactive Attack Graph & Blast Radius")
+    col_g_title, col_g_dl = st.columns([1.5, 1])
+    with col_g_title:
+        st.subheader("🕸️ Interactive Attack Graph & Blast Radius")
+    with col_g_dl:
+        if "edges" in st.session_state and st.session_state["edges"]:
+            import json
+            graph_export_payload = {
+                "scenario_entities": st.session_state.get("entities", []),
+                "nodes": st.session_state.get("nodes_dict", {}),
+                "edges": st.session_state["edges"],
+                "nodes_metadata": st.session_state.get("nodes_meta", {}),
+                "threat_metrics": st.session_state.get("graph_metrics", {}),
+                "exported_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+            }
+            st.download_button(
+                "⬇️ Export Graph Data (JSON)",
+                data=json.dumps(graph_export_payload, indent=2),
+                file_name="ThreatGraph_Attack_Topology.json",
+                mime="application/json",
+                use_container_width=True,
+                key="btn_dl_graph_json"
+            )
     st.markdown("""
     <div style="display: flex; flex-wrap: wrap; gap: 6px; font-size: 11px; margin-bottom: 10px; font-weight: 600;">
         <span style="background: #3B0D0C; color: #FCA5A5; padding: 3px 8px; border-radius: 4px; border: 1px solid #EF4444;">💀 Adversary</span>
@@ -1668,7 +1846,7 @@ with container_graph:
     </div>
     """, unsafe_allow_html=True)
     if "edges" in st.session_state and st.session_state["edges"]:
-        st.caption(f"Showing attack path for: {', '.join(st.session_state.get('entities', []))} • (Click any node to inspect in HUD)")
+        st.caption(f"Showing attack path for: {', '.join(st.session_state.get('entities', []))} • (Click node to inspect • 📷 Export PNG or 📥 Export JSON in top toolbar)")
         render_attack_graph(st.session_state["nodes_dict"], st.session_state["edges"], st.session_state.get("nodes_meta"), graph_height=700)
     else:
         st.info("Execute a threat scenario on the left to visualize the attack path and lateral movement graph!")
