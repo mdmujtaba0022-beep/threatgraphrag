@@ -498,10 +498,10 @@ def render_attack_graph(nodes_dict, edges, nodes_meta=None, graph_height=720):
           background: transparent;
           transition: height 0.2s ease;
         }}
-        .toolbar {{
+        .layout-bar {{
           position: absolute;
           top: 10px;
-          right: 12px;
+          left: 12px;
           z-index: 100;
           display: flex;
           gap: 5px;
@@ -511,6 +511,43 @@ def render_attack_graph(nodes_dict, edges, nodes_meta=None, graph_height=720):
           border-radius: 6px;
           border: 1px solid #334155;
           box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+        }}
+        .zoom-toolbar {{
+          position: absolute;
+          top: 10px;
+          right: 12px;
+          z-index: 100;
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+          background: rgba(11, 17, 32, 0.9);
+          backdrop-filter: blur(6px);
+          padding: 4px;
+          border-radius: 6px;
+          border: 1px solid #334155;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+        }}
+        .zoom-btn {{
+          width: 28px;
+          height: 28px;
+          background: #1E293B;
+          color: #E2E8F0;
+          border: 1px solid #475569;
+          border-radius: 4px;
+          font-size: 13px;
+          font-weight: 700;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: all 0.15s ease;
+          font-family: inherit;
+        }}
+        .zoom-btn:hover {{
+          background: #3B82F6;
+          border-color: #60A5FA;
+          color: #FFFFFF;
+          transform: scale(1.08);
         }}
         .tool-btn {{
           background: #1E293B;
@@ -652,17 +689,17 @@ def render_attack_graph(nodes_dict, edges, nodes_meta=None, graph_height=720):
     </head>
     <body>
       <div id="graph-wrapper">
-        <div class="toolbar">
+        <div class="layout-bar">
           <button class="tool-btn active-mode" id="btn-lr" onclick="setHierarchy('LR')">🏛️ Kill-Chain (LR)</button>
           <button class="tool-btn" id="btn-ud" onclick="setHierarchy('UD')">🔻 Kill-Chain (UD)</button>
-          <button class="tool-btn" id="btn-force" onclick="setForceDirected()">🪐 Force-Directed</button>
-          <span class="divider"></span>
-          <button class="tool-btn" onclick="network.moveTo({{scale: network.getScale() * 1.3}})">🔍 +</button>
-          <button class="tool-btn" onclick="network.moveTo({{scale: network.getScale() * 0.7}})">🔍 -</button>
-          <button class="tool-btn" onclick="network.fit({{animation: {{duration: 400}}}})">🎯 Fit</button>
+          <button class="tool-btn" id="btn-force" onclick="setForceDirected()">🪐 Force</button>
           <button class="tool-btn" id="freeze-btn" onclick="togglePhysics()">⏸️ Freeze</button>
-          <span class="divider"></span>
-          <button class="tool-btn" id="fs-btn" onclick="toggleFullscreen()">⛶ Fullscreen</button>
+        </div>
+        <div class="zoom-toolbar">
+          <button class="zoom-btn" onclick="network.moveTo({{scale: network.getScale() * 1.35}})" title="Zoom In (+)">➕</button>
+          <button class="zoom-btn" onclick="network.moveTo({{scale: network.getScale() * 0.72}})" title="Zoom Out (-)">➖</button>
+          <button class="zoom-btn" onclick="network.fit({{animation: {{duration: 350}}}})" title="Reset View (🎯)">🎯</button>
+          <button class="zoom-btn" id="fs-btn" onclick="toggleFullscreen()" title="Fullscreen Toggle (⛶)">⛶</button>
         </div>
         <div id="network"></div>
         <div id="hud-panel" class="tactical-hud">
@@ -898,121 +935,238 @@ def render_attack_graph(nodes_dict, edges, nodes_meta=None, graph_height=720):
     """
     components.html(html, height=wrapper_h + 20)
 
-# Minimalist Resizer: Slide Left or Right to Minimize / Maximize panes
-if "split_ratio" not in st.session_state:
-    st.session_state["split_ratio"] = 50
+# Two-column layout with interactive draggable boundary splitter
+st.markdown("""
+<style>
+/* Style the gap between columns */
+[data-testid="stHorizontalBlock"] {
+  position: relative !important;
+}
 
-# Compact sliding control bar with 1-click snap buttons
-col_slider, col_btn_graph, col_btn_bal, col_btn_rep = st.columns([5.5, 1.4, 1.0, 1.4])
+.threat-boundary-gutter {
+  position: absolute !important;
+  top: 0 !important;
+  bottom: 0 !important;
+  width: 16px !important;
+  cursor: col-resize !important;
+  z-index: 9999 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  user-select: none !important;
+  touch-action: none !important;
+}
 
-with col_slider:
-    split_ratio = st.slider(
-        "↔️ **Slide Left or Right to Resize:** ⬅️ Maximize Graph • 50/50 • Maximize Report ➡️",
-        min_value=15,
-        max_value=85,
-        value=st.session_state["split_ratio"],
-        step=5,
-        format="%d%%",
-        key="split_slider_widget",
-        help="Slide left to minimize report and maximize graph (up to 85%). Slide right to maximize report and minimize graph."
-    )
-    st.session_state["split_ratio"] = split_ratio
+.threat-boundary-line {
+  width: 2px !important;
+  height: 100% !important;
+  background: #334155 !important;
+  border-radius: 1px !important;
+  transition: all 0.15s ease !important;
+}
 
-with col_btn_graph:
-    st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True)
-    if st.button("◀ Max Graph", help="Minimize Report to 15%, Maximize Graph to 85%", use_container_width=True):
-        st.session_state["split_ratio"] = 15
-        st.session_state["split_slider_widget"] = 15
-        st.rerun()
+.threat-boundary-gutter:hover .threat-boundary-line,
+.threat-boundary-gutter.dragging .threat-boundary-line {
+  background: #3B82F6 !important;
+  width: 4px !important;
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.8) !important;
+}
 
-with col_btn_bal:
-    st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True)
-    if st.button("⚖️ 50/50", help="Reset to balanced 50% / 50% split", use_container_width=True):
-        st.session_state["split_ratio"] = 50
-        st.session_state["split_slider_widget"] = 50
-        st.rerun()
+.threat-boundary-handle {
+  position: absolute !important;
+  top: 40% !important;
+  transform: translateY(-50%) !important;
+  width: 24px !important;
+  height: 60px !important;
+  background: #0B1120 !important;
+  border: 1px solid #475569 !important;
+  border-radius: 8px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 3px !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.6) !important;
+  cursor: col-resize !important;
+  transition: all 0.15s ease !important;
+}
 
-with col_btn_rep:
-    st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True)
-    if st.button("Max Report ▶", help="Maximize Report to 85%, Minimize Graph to 15%", use_container_width=True):
-        st.session_state["split_ratio"] = 85
-        st.session_state["split_slider_widget"] = 85
-        st.rerun()
+.threat-boundary-gutter:hover .threat-boundary-handle,
+.threat-boundary-gutter.dragging .threat-boundary-handle {
+  border-color: #3B82F6 !important;
+  background: #1E293B !important;
+  box-shadow: 0 0 12px rgba(59, 130, 246, 0.5) !important;
+}
 
-# Layout Columns based on the slide value
-col_report_width = st.session_state["split_ratio"]
-col_graph_width = 100 - col_report_width
-container_report, container_graph = st.columns([col_report_width, col_graph_width])
+.threat-collapse-btn-left,
+.threat-collapse-btn-right {
+  font-size: 10px !important;
+  color: #94A3B8 !important;
+  cursor: pointer !important;
+  padding: 2px !important;
+  transition: color 0.15s ease, transform 0.15s ease !important;
+}
 
-# Live mouse-draggable splitter handle between panes
+.threat-collapse-btn-left:hover {
+  color: #60A5FA !important;
+  transform: scale(1.2) !important;
+}
+
+.threat-collapse-btn-right:hover {
+  color: #60A5FA !important;
+  transform: scale(1.2) !important;
+}
+
+.threat-drag-dots {
+  font-size: 11px !important;
+  color: #64748B !important;
+  line-height: 1 !important;
+  pointer-events: none !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
+container_report, container_graph = st.columns([1, 1])
+
+# Boundary Splitter Script: Allows taking mouse to boundary line to drag/minimize/maximize
 components.html("""
 <script>
 (function() {
-  function attachSplitter() {
+  function setupBoundarySplitter() {
     try {
       const pDoc = window.parent.document;
-      const cols = pDoc.querySelectorAll('[data-testid="stColumn"]');
-      if (cols.length >= 2) {
-        const colL = cols[0];
-        const colR = cols[1];
-        const parent = colL.parentElement;
-        if (!parent || parent.dataset.splitterAttached) return;
-        parent.dataset.splitterAttached = "true";
+      if (!pDoc) return;
+      
+      const hBlocks = pDoc.querySelectorAll('[data-testid="stHorizontalBlock"]');
+      let targetBlock = null;
+      let leftCol = null;
+      let rightCol = null;
+      
+      for (const block of hBlocks) {
+        const cols = block.querySelectorAll(':scope > [data-testid="stColumn"]');
+        if (cols.length === 2) {
+          targetBlock = block;
+          leftCol = cols[0];
+          rightCol = cols[1];
+          break;
+        }
+      }
+      
+      if (!targetBlock || !leftCol || !rightCol) return;
+      
+      targetBlock.style.position = 'relative';
+      targetBlock.style.overflow = 'visible';
+      leftCol.style.position = 'relative';
+      leftCol.style.paddingRight = '12px';
+      rightCol.style.paddingLeft = '12px';
+      
+      let gutter = targetBlock.querySelector('.threat-boundary-gutter');
+      if (!gutter) {
+        gutter = pDoc.createElement('div');
+        gutter.className = 'threat-boundary-gutter';
+        gutter.title = 'Drag boundary left/right to resize • Click arrows to minimize/maximize';
+        gutter.innerHTML = `
+          <div class="threat-boundary-line"></div>
+          <div class="threat-boundary-handle">
+            <span class="threat-collapse-btn-left" title="Minimize Report / Maximize Graph">◀</span>
+            <span class="threat-drag-dots">⋮</span>
+            <span class="threat-collapse-btn-right" title="Minimize Graph / Maximize Report">▶</span>
+          </div>
+        `;
+        targetBlock.appendChild(gutter);
         
-        colL.style.borderRight = "3px solid #334155";
-        colL.style.paddingRight = "14px";
-        colL.style.position = "relative";
-        
-        const handle = pDoc.createElement("div");
-        handle.style.position = "absolute";
-        handle.style.top = "0";
-        handle.style.right = "-8px";
-        handle.style.width = "16px";
-        handle.style.height = "100%";
-        handle.style.cursor = "col-resize";
-        handle.style.zIndex = "999";
-        handle.title = "Click & drag left or right to resize panes";
-        colL.appendChild(handle);
-        
-        let dragging = false;
+        let isDragging = false;
         let startX = 0;
         let startLeftW = 0;
         
-        handle.addEventListener("mousedown", function(e) {
-          dragging = true;
+        function setWidths(leftPercent) {
+          leftPercent = Math.max(5, Math.min(95, leftPercent));
+          sessionStorage.setItem('threat_split_ratio', leftPercent);
+          leftCol.style.flex = 'none';
+          leftCol.style.width = leftPercent + '%';
+          rightCol.style.flex = 'none';
+          rightCol.style.width = (100 - leftPercent) + '%';
+          gutter.style.left = `calc(${leftPercent}% - 8px)`;
+          window.parent.dispatchEvent(new Event('resize'));
+        }
+        
+        const saved = sessionStorage.getItem('threat_split_ratio');
+        if (saved) {
+          setWidths(parseFloat(saved));
+        } else {
+          gutter.style.left = 'calc(50% - 8px)';
+        }
+        
+        gutter.addEventListener('mousedown', function(e) {
+          if (e.target.classList.contains('threat-collapse-btn-left')) {
+            const currentW = (leftCol.getBoundingClientRect().width / targetBlock.getBoundingClientRect().width) * 100;
+            setWidths(currentW > 20 ? 8 : 50);
+            e.stopPropagation();
+            return;
+          }
+          if (e.target.classList.contains('threat-collapse-btn-right')) {
+            const currentW = (leftCol.getBoundingClientRect().width / targetBlock.getBoundingClientRect().width) * 100;
+            setWidths(currentW < 80 ? 92 : 50);
+            e.stopPropagation();
+            return;
+          }
+          
+          isDragging = true;
           startX = e.clientX;
-          startLeftW = colL.getBoundingClientRect().width;
-          pDoc.body.style.cursor = "col-resize";
-          pDoc.body.style.userSelect = "none";
+          startLeftW = leftCol.getBoundingClientRect().width;
+          gutter.classList.add('dragging');
+          pDoc.body.style.cursor = 'col-resize';
+          pDoc.body.style.userSelect = 'none';
+          
+          pDoc.querySelectorAll('iframe').forEach(f => f.style.pointerEvents = 'none');
           e.preventDefault();
         });
         
-        pDoc.addEventListener("mousemove", function(e) {
-          if (!dragging) return;
-          const totalW = parent.getBoundingClientRect().width;
-          const delta = e.clientX - startX;
-          const newW = startLeftW + delta;
-          const pct = Math.max(15, Math.min(85, (newW / totalW) * 100));
-          colL.style.width = pct + "%";
-          colL.style.flex = "none";
-          colR.style.width = (100 - pct) + "%";
-          colR.style.flex = "none";
+        gutter.addEventListener('dblclick', function() {
+          setWidths(50);
         });
         
-        pDoc.addEventListener("mouseup", function() {
-          if (dragging) {
-            dragging = false;
-            pDoc.body.style.cursor = "";
-            pDoc.body.style.userSelect = "";
-            window.dispatchEvent(new Event("resize"));
+        pDoc.addEventListener('mousemove', function(e) {
+          if (!isDragging) return;
+          const totalW = targetBlock.getBoundingClientRect().width;
+          const delta = e.clientX - startX;
+          const newW = startLeftW + delta;
+          const pct = (newW / totalW) * 100;
+          setWidths(pct);
+        });
+        
+        pDoc.addEventListener('mouseup', function() {
+          if (isDragging) {
+            isDragging = false;
+            gutter.classList.remove('dragging');
+            pDoc.body.style.cursor = '';
+            pDoc.body.style.userSelect = '';
+            pDoc.querySelectorAll('iframe').forEach(f => f.style.pointerEvents = '');
+            window.parent.dispatchEvent(new Event('resize'));
           }
         });
+      } else {
+        const saved = sessionStorage.getItem('threat_split_ratio');
+        if (saved) {
+          const pct = parseFloat(saved);
+          leftCol.style.flex = 'none';
+          leftCol.style.width = pct + '%';
+          rightCol.style.flex = 'none';
+          rightCol.style.width = (100 - pct) + '%';
+          gutter.style.left = `calc(${pct}% - 8px)`;
+        }
       }
     } catch(err) {
-      console.log("Splitter attach error:", err);
+      console.error('Splitter error:', err);
     }
   }
-  setTimeout(attachSplitter, 350);
+
+  setTimeout(setupBoundarySplitter, 200);
+  setTimeout(setupBoundarySplitter, 600);
+  try {
+    const observer = new MutationObserver(setupBoundarySplitter);
+    observer.observe(window.parent.document.body, { childList: true, subtree: true });
+  } catch(e) {}
 })();
 </script>
 """, height=0)
