@@ -18,7 +18,35 @@ from src.repo_evaluator import (
     generate_ai_repo_audit_report,
     PRESET_REPOSITORIES
 )
-from src.report_generator import synthesize_technical_report, synthesize_technical_report_stream
+import importlib
+import sys
+
+if "src.report_generator" in sys.modules:
+    try:
+        importlib.reload(sys.modules["src.report_generator"])
+    except Exception:
+        pass
+
+if "src.cache_manager" in sys.modules:
+    try:
+        importlib.reload(sys.modules["src.cache_manager"])
+    except Exception:
+        pass
+
+try:
+    from src.report_generator import synthesize_technical_report, synthesize_technical_report_stream
+except ImportError:
+    import src.report_generator as _rg
+    importlib.reload(_rg)
+    synthesize_technical_report = getattr(_rg, "synthesize_technical_report")
+    if hasattr(_rg, "synthesize_technical_report_stream"):
+        synthesize_technical_report_stream = getattr(_rg, "synthesize_technical_report_stream")
+    else:
+        def synthesize_technical_report_stream(facts, query, client=None):
+            full = synthesize_technical_report(facts, query, client=client)
+            for line in full.splitlines(keepends=True):
+                yield line
+
 from src.cache_manager import threat_cache
 
 # Page config

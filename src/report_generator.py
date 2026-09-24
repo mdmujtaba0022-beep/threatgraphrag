@@ -12,6 +12,13 @@ from typing import List, Dict, Any, Optional
 
 from src.cache_manager import threat_cache
 
+__all__ = [
+    "synthesize_technical_report",
+    "synthesize_technical_report_stream",
+    "generate_deterministic_report",
+    "parse_graph_facts",
+]
+
 logger = logging.getLogger(__name__)
 
 def parse_graph_facts(facts: List[str]) -> Dict[str, Any]:
