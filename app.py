@@ -1023,6 +1023,52 @@ st.markdown("""
   line-height: 1 !important;
   pointer-events: none !important;
 }
+
+/* Report Fullscreen Styling */
+.report-fullscreen-icon {
+  background: #1E293B !important;
+  color: #CBD5E1 !important;
+  border: 1px solid #475569 !important;
+  border-radius: 4px !important;
+  padding: 4px 10px !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+  transition: all 0.15s ease !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+}
+
+.report-fullscreen-icon:hover {
+  background: #2563EB !important;
+  border-color: #60A5FA !important;
+  color: #FFFFFF !important;
+  box-shadow: 0 0 8px rgba(37, 99, 235, 0.6) !important;
+}
+
+[data-testid="stVerticalBlock"]:fullscreen,
+.report-overlay-fullscreen {
+  background: #070B14 !important;
+  color: #E2E8F0 !important;
+  padding: 36px 54px !important;
+  overflow-y: auto !important;
+  box-sizing: border-box !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  z-index: 999999 !important;
+}
+
+[data-testid="stVerticalBlock"]:fullscreen .stMarkdown,
+.report-overlay-fullscreen .stMarkdown {
+  max-width: 1100px !important;
+  margin: 0 auto !important;
+  line-height: 1.65 !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -1167,6 +1213,59 @@ components.html("""
     const observer = new MutationObserver(setupBoundarySplitter);
     observer.observe(window.parent.document.body, { childList: true, subtree: true });
   } catch(e) {}
+
+  // Report Fullscreen Toggle Function
+  window.parent.toggleReportFS = function() {
+    try {
+      const pDoc = window.parent.document;
+      const marker = pDoc.getElementById('threat-report-marker');
+      if (!marker) return;
+      
+      const target = marker.closest('[data-testid="stVerticalBlock"]') || marker.parentElement;
+      if (!target) return;
+      
+      if (!pDoc.fullscreenElement && !target.classList.contains('report-overlay-fullscreen')) {
+        if (target.requestFullscreen) {
+          target.requestFullscreen().catch(() => {
+            target.classList.add('report-overlay-fullscreen');
+            updateReportFSBtn(true);
+          });
+        } else {
+          target.classList.add('report-overlay-fullscreen');
+          updateReportFSBtn(true);
+        }
+      } else {
+        if (pDoc.fullscreenElement) {
+          pDoc.exitFullscreen();
+        }
+        target.classList.remove('report-overlay-fullscreen');
+        updateReportFSBtn(false);
+      }
+    } catch(err) {
+      console.error('Report Fullscreen error:', err);
+    }
+  };
+
+  function updateReportFSBtn(isFS) {
+    try {
+      const pDoc = window.parent.document;
+      const btns = pDoc.querySelectorAll('#report-fs-btn');
+      btns.forEach(btn => {
+        const icon = btn.querySelector('#report-fs-icon');
+        const text = btn.querySelector('#report-fs-text');
+        if (icon) icon.innerText = isFS ? '✖' : '⛶';
+        if (text) text.innerText = isFS ? 'Exit Fullscreen' : 'Fullscreen';
+      });
+    } catch(e) {}
+  }
+
+  try {
+    const pDoc = window.parent.document;
+    pDoc.addEventListener('fullscreenchange', function() {
+      const isFS = !!pDoc.fullscreenElement;
+      updateReportFSBtn(isFS);
+    });
+  } catch(e) {}
 })();
 </script>
 """, height=0)
@@ -1204,39 +1303,57 @@ with container_report:
                 st.session_state["is_cached"] = is_hit
                 st.session_state["traversal_ms"] = traversal_ms
                 
-                st.markdown("### 📋 SOC Threat Intelligence Report")
-                if is_hit:
-                    st.info(f"⚡ **Cache HIT** (Retrieved in {traversal_ms}ms • 0 LLM API tokens used)")
-                else:
-                    st.success(f"🚀 **Live Generation** (Neo4j Full-Text Traversal: {traversal_ms}ms • Streaming via Gemini)")
+                rep_container = st.container()
+                with rep_container:
+                    st.markdown("""
+                    <div id="threat-report-marker" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                      <span style="font-size:1.15rem; font-weight:700; color:#F8FAFC;">📋 SOC Threat Intelligence Report</span>
+                      <button id="report-fs-btn" class="report-fullscreen-icon" onclick="toggleReportFS()" title="Toggle Fullscreen Reading View (⛶)">
+                        <span id="report-fs-icon">⛶</span> <span id="report-fs-text">Fullscreen</span>
+                      </button>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    if is_hit:
+                        st.info(f"⚡ **Cache HIT** (Retrieved in {traversal_ms}ms • 0 LLM API tokens used)")
+                    else:
+                        st.success(f"🚀 **Live Generation** (Neo4j Full-Text Traversal: {traversal_ms}ms • Streaming via Gemini)")
 
-                # Token-by-token live streaming
-                stream_gen = synthesize_technical_report_stream(facts, user_query, client=client)
-                answer = st.write_stream(stream_gen)
-                st.session_state["answer"] = answer
+                    # Token-by-token live streaming
+                    stream_gen = synthesize_technical_report_stream(facts, user_query, client=client)
+                    answer = st.write_stream(stream_gen)
+                    st.session_state["answer"] = answer
 
         elif "answer" in st.session_state:
-            st.markdown("### 📋 SOC Threat Intelligence Report")
-            col_rep_meta, col_rep_act = st.columns([1.2, 1])
-            with col_rep_meta:
-                if st.session_state.get("is_cached"):
-                    st.info(f"⚡ **Cached Report** (0 LLM API tokens consumed)")
-                else:
-                    st.success(f"⚡ **Neo4j Graph Traversal:** {st.session_state.get('traversal_ms', 12)}ms")
-            with col_rep_act:
-                st.download_button(
-                    "⬇️ Download Markdown Advisory",
-                    data=st.session_state["answer"],
-                    file_name="CISA_CTI_Advisory_Report.md",
-                    mime="text/markdown",
-                    use_container_width=True
-                )
+            rep_container = st.container()
+            with rep_container:
+                st.markdown("""
+                <div id="threat-report-marker" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                  <span style="font-size:1.15rem; font-weight:700; color:#F8FAFC;">📋 SOC Threat Intelligence Report</span>
+                  <button id="report-fs-btn" class="report-fullscreen-icon" onclick="toggleReportFS()" title="Toggle Fullscreen Reading View (⛶)">
+                    <span id="report-fs-icon">⛶</span> <span id="report-fs-text">Fullscreen</span>
+                  </button>
+                </div>
+                """, unsafe_allow_html=True)
+                col_rep_meta, col_rep_act = st.columns([1.2, 1])
+                with col_rep_meta:
+                    if st.session_state.get("is_cached"):
+                        st.info(f"⚡ **Cached Report** (0 LLM API tokens consumed)")
+                    else:
+                        st.success(f"⚡ **Neo4j Graph Traversal:** {st.session_state.get('traversal_ms', 12)}ms")
+                with col_rep_act:
+                    st.download_button(
+                        "⬇️ Download Markdown Advisory",
+                        data=st.session_state["answer"],
+                        file_name="CISA_CTI_Advisory_Report.md",
+                        mime="text/markdown",
+                        use_container_width=True
+                    )
 
-            st.markdown(st.session_state["answer"])
+                st.markdown(st.session_state["answer"])
 
-            with st.expander("🔍 Discovered Attack Graph Paths (Evidence)"):
-                for f in st.session_state["facts"]:
-                    st.write(f)
+                with st.expander("🔍 Discovered Attack Graph Paths (Evidence)"):
+                    for f in st.session_state["facts"]:
+                        st.write(f)
 
     with tab_sbom:
         st.markdown("#### 📦 Software Supply Chain & Vulnerability Auditor")
@@ -1340,6 +1457,13 @@ with container_report:
                         
                 if "repo_ai_report" in st.session_state and st.session_state["repo_ai_report"]:
                     with st.expander("📋 SOC Threat Intelligence & Remediation Roadmap (AI-Generated)", expanded=True):
+                        st.markdown("""
+                        <div id="threat-report-marker" style="display:flex; justify-content:flex-end; margin-bottom:8px;">
+                          <button id="report-fs-btn" class="report-fullscreen-icon" onclick="toggleReportFS()" title="Toggle Fullscreen Reading View (⛶)">
+                            <span id="report-fs-icon">⛶</span> <span id="report-fs-text">Fullscreen</span>
+                          </button>
+                        </div>
+                        """, unsafe_allow_html=True)
                         st.markdown(st.session_state["repo_ai_report"])
                         
                 st.success("✅ Interactive Attack Graph on the right updated with the repository supply chain topology!")
