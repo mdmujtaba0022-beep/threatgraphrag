@@ -362,15 +362,15 @@ def evaluate_repo_dependencies(driver, packages: List[Dict[str, Any]], repo_iden
                 OPTIONAL MATCH (svc:EnterpriseService)-[:DEPENDS_ON]->(p)
                 OPTIONAL MATCH (svc)-[:CAN_PIVOT_TO]->(downstream:EnterpriseService)
                 RETURN 
-                    p.name AS matched_package,
-                    v.name AS cve,
+                    p.name AS matched_package, properties(p) AS pkg_props,
+                    v.name AS cve, properties(v) AS vuln_props,
                     v.cvss AS cvss,
                     v.type AS flaw_type,
-                    tech.name AS technique,
-                    actor.name AS threat_actor,
-                    patch.name AS remediation,
-                    svc.name AS service_impacted,
-                    downstream.name AS downstream_blast_radius
+                    tech.name AS technique, properties(tech) AS tech_props,
+                    actor.name AS threat_actor, properties(actor) AS actor_props,
+                    patch.name AS remediation, properties(patch) AS patch_props,
+                    svc.name AS service_impacted, properties(svc) AS svc_props,
+                    downstream.name AS downstream_blast_radius, properties(downstream) AS downstream_props
                 """
                 records = list(session.run(cypher, term=term))
                 for r in records:
@@ -413,22 +413,29 @@ def evaluate_repo_dependencies(driver, packages: List[Dict[str, Any]], repo_iden
                         "lateral_movement_target": r["downstream_blast_radius"] or "Internal Core Services"
                     })
                     
-                    # Construct Vis.js Graph Topology
+                    # Construct Vis.js Graph Topology & Rich Metadata
+                    if "nodes_meta" not in locals():
+                        nodes_meta = {repo_node_id: {"label": "GitHubRepo", "props": {"repository": repo_identifier}}}
+                        
                     # 1. Repo -> Package
                     nodes_dict[pkg_id] = "SoftwarePackage"
+                    nodes_meta[pkg_id] = {"label": "SoftwarePackage", "props": dict(r["pkg_props"]) if r["pkg_props"] else {}}
                     edges.append({"from": repo_node_id, "to": pkg_id, "label": "INCLUDES"})
                     
                     # 2. CVE -> Package
                     nodes_dict[cve] = "Vulnerability"
+                    nodes_meta[cve] = {"label": "Vulnerability", "props": dict(r["vuln_props"]) if r["vuln_props"] else {}}
                     edges.append({"from": cve, "to": pkg_id, "label": "EXPLOITS"})
                     
                     # 3. Threat Actor & Technique
                     if r["threat_actor"]:
                         actor = r["threat_actor"]
                         nodes_dict[actor] = "ThreatActor"
+                        nodes_meta[actor] = {"label": "ThreatActor", "props": dict(r["actor_props"]) if r["actor_props"] else {}}
                         if r["technique"]:
                             tech = r["technique"]
                             nodes_dict[tech] = "AttackTechnique"
+                            nodes_meta[tech] = {"label": "AttackTechnique", "props": dict(r["tech_props"]) if r["tech_props"] else {}}
                             edges.append({"from": actor, "to": tech, "label": "LEVERAGES"})
                             edges.append({"from": tech, "to": cve, "label": "TARGETS"})
                         else:
@@ -438,17 +445,23 @@ def evaluate_repo_dependencies(driver, packages: List[Dict[str, Any]], repo_iden
                     if r["remediation"]:
                         patch = r["remediation"]
                         nodes_dict[patch] = "RemediationPatch"
+                        nodes_meta[patch] = {"label": "RemediationPatch", "props": dict(r["patch_props"]) if r["patch_props"] else {}}
                         edges.append({"from": cve, "to": patch, "label": "MITIGATED_BY"})
                         
                     # 5. Simulated Downstream Services Blast Radius
                     if r["service_impacted"]:
                         svc = r["service_impacted"]
                         nodes_dict[svc] = "EnterpriseService"
+                        nodes_meta[svc] = {"label": "EnterpriseService", "props": dict(r["svc_props"]) if r["svc_props"] else {}}
                         edges.append({"from": svc, "to": pkg_id, "label": "RUNS_SOFTWARE"})
                         if r["downstream_blast_radius"]:
                             downstream = r["downstream_blast_radius"]
                             nodes_dict[downstream] = "EnterpriseService"
+                            nodes_meta[downstream] = {"label": "EnterpriseService", "props": dict(r["downstream_props"]) if r["downstream_props"] else {}}
                             edges.append({"from": svc, "to": downstream, "label": "CAN_PIVOT_TO"})
+
+    if "nodes_meta" not in locals():
+        nodes_meta = {repo_node_id: {"label": "GitHubRepo", "props": {"repository": repo_identifier}}}
 
     # Deduplicate edges
     unique_edges = []
@@ -491,7 +504,8 @@ def evaluate_repo_dependencies(driver, packages: List[Dict[str, Any]], repo_iden
         "findings": findings,
         "vis_graph": {
             "nodes": nodes_dict,
-            "edges": unique_edges
+            "edges": unique_edges,
+            "nodes_meta": nodes_meta
         }
     }
 

@@ -136,9 +136,19 @@ def query_threat_graph(request: QueryRequest):
     
     # 1. Fast Entity Extraction
     known_entities = [
-        "APT29", "Cozy Bear", "Lazarus", "LockBit",
-        "CVE-2021-44228", "Log4Shell", "CVE-2024-3094", "XZ Backdoor", "CVE-2022-22965", "Spring4Shell", "CVE-2024-21762",
-        "Customer-Auth-Service", "Payment-Processing-Gateway", "Enterprise-SSH-Bastion", "Analytics-ETL-Pipeline"
+        "APT29", "Nobelium", "Cozy Bear", "Midnight Blizzard",
+        "Lazarus Group", "Lazarus", "HIDDEN COBRA", "Diamond Sleet",
+        "Volt Typhoon", "BRONZE SILHOUETTE", "Vanguard Panda",
+        "LockBit 3.0", "LockBit", "FIN7", "Carbanak",
+        "CVE-2021-44228", "Log4Shell", "CVE-2024-3094", "XZ Utils", "XZ Backdoor",
+        "CVE-2022-22965", "Spring4Shell", "CVE-2024-21762", "FortiOS",
+        "CVE-2023-4966", "Citrix Bleed", "NetScaler",
+        "k8s-auth-ingress-gateway", "payment-token-vault-service", "corporate-active-directory-dc01",
+        "enterprise-bastion-ssh-host", "data-analytics-dataproc-spark", "edge-vpn-gateway-fortigate",
+        "Customer-Auth-Service", "Payment-Processing-Gateway", "Enterprise-SSH-Bastion", "Analytics-ETL-Pipeline",
+        "Exploit Public-Facing Application", "Supply Chain Compromise", "Command and Scripting Interpreter", "Valid Accounts",
+        "Remote Services", "Server Software Component", "Data Encrypted for Impact",
+        "log4j", "xz-utils", "spring-beans", "fortios", "netscaler"
     ]
     matched = [e for e in known_entities if e.lower() in request.query.lower()]
     entities = matched if matched else [request.query.strip()]

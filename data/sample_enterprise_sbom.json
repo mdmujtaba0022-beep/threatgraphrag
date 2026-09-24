@@ -11,7 +11,7 @@
   },
   "services": [
     {
-      "name": "Customer-Auth-Service",
+      "name": "k8s-auth-ingress-gateway",
       "dependencies": [
         "org.apache.logging.log4j:log4j-core:2.14.1",
         "org.springframework:spring-beans:5.3.17",
@@ -19,14 +19,21 @@
       ]
     },
     {
-      "name": "Enterprise-SSH-Bastion",
+      "name": "enterprise-bastion-ssh-host",
       "dependencies": [
         "xz-utils:5.6.0",
         "openssh-server:8.9p1"
       ]
     },
     {
-      "name": "Analytics-ETL-Pipeline",
+      "name": "edge-vpn-gateway-fortigate",
+      "dependencies": [
+        "fortios:7.4.2",
+        "netscaler-adc:13.1-48.47"
+      ]
+    },
+    {
+      "name": "data-analytics-dataproc-spark",
       "dependencies": [
         "org.apache.spark:spark-core_2.12:3.3.0",
         "numpy:1.24.3",

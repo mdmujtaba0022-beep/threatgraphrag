@@ -48,11 +48,24 @@ class QueryEntities(BaseModel):
 def extract_entities(query: str) -> List[str]:
     # 1. Instant heuristic match (<0.01s)
     known_entities = [
-        "APT29", "Cozy Bear", "Lazarus", "LockBit",
-        "CVE-2021-44228", "Log4Shell", "CVE-2024-3094", "XZ Backdoor", "CVE-2022-22965", "Spring4Shell", "CVE-2024-21762",
+        # Adversaries
+        "APT29", "Nobelium", "Cozy Bear", "Midnight Blizzard",
+        "Lazarus Group", "Lazarus", "HIDDEN COBRA", "Diamond Sleet",
+        "Volt Typhoon", "BRONZE SILHOUETTE", "Vanguard Panda",
+        "LockBit 3.0", "LockBit", "FIN7", "Carbanak",
+        # Vulnerabilities
+        "CVE-2021-44228", "Log4Shell", "CVE-2024-3094", "XZ Utils", "XZ Backdoor",
+        "CVE-2022-22965", "Spring4Shell", "CVE-2024-21762", "FortiOS",
+        "CVE-2023-4966", "Citrix Bleed", "NetScaler",
+        # Infrastructure Assets
+        "k8s-auth-ingress-gateway", "payment-token-vault-service", "corporate-active-directory-dc01",
+        "enterprise-bastion-ssh-host", "data-analytics-dataproc-spark", "edge-vpn-gateway-fortigate",
         "Customer-Auth-Service", "Payment-Processing-Gateway", "Enterprise-SSH-Bastion", "Analytics-ETL-Pipeline",
-        "Exploit Public-Facing Application", "Supply Chain Compromise", "Command and Scripting Interpreter", "Data Encrypted for Impact",
-        "log4j", "xz-utils", "spring-beans", "fortios"
+        # Techniques
+        "Exploit Public-Facing Application", "Supply Chain Compromise", "Command and Scripting Interpreter", "Valid Accounts",
+        "Remote Services", "Server Software Component", "Data Encrypted for Impact",
+        # Packages
+        "log4j", "xz-utils", "spring-beans", "fortios", "netscaler"
     ]
     matched = [e for e in known_entities if e.lower() in query.lower()]
     if matched:
@@ -60,20 +73,21 @@ def extract_entities(query: str) -> List[str]:
 
     # 2. Fall back to Gemini if no preset entities detected
     prompt = f"Identify all specific cybersecurity entities, threat groups, CVEs, techniques, or enterprise services mentioned in: '{query}'"
-    try:
-        res = client.models.generate_content(
-            model="gemini-3.6-flash",
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema=QueryEntities,
-                temperature=0.0
+    for m in ["gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-3.6-flash"]:
+        try:
+            res = client.models.generate_content(
+                model=m,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=QueryEntities,
+                    temperature=0.0
+                )
             )
-        )
-        if res.parsed and res.parsed.entities:
-            return res.parsed.entities
-    except Exception:
-        pass
+            if res.parsed and res.parsed.entities:
+                return res.parsed.entities
+        except Exception:
+            continue
         
     return [query.strip()]
 
@@ -81,6 +95,7 @@ def fetch_threat_subgraph(entities: List[str]):
     facts = []
     nodes_dict = {}
     edges_list = []
+    nodes_meta = {}
     
     with driver.session() as session:
         for entity in entities:
@@ -91,15 +106,17 @@ def fetch_threat_subgraph(entities: List[str]):
             UNWIND relationships(path) as rel
             WITH DISTINCT rel, startNode(rel) as s, endNode(rel) as t
             RETURN 
-                s.name AS from_name, labels(s)[0] AS from_label,
+                s.name AS from_name, labels(s)[0] AS from_label, properties(s) AS s_props,
                 type(rel) AS relationship,
-                t.name AS to_name, labels(t)[0] AS to_label
-            LIMIT 25
+                t.name AS to_name, labels(t)[0] AS to_label, properties(t) AS t_props
+            LIMIT 35
             """
             result = session.run(cypher, entity=entity)
             for record in result:
                 src, s_label = record['from_name'], record['from_label']
                 tgt, t_label = record['to_name'], record['to_label']
+                s_props = dict(record['s_props']) if record['s_props'] else {}
+                t_props = dict(record['t_props']) if record['t_props'] else {}
                 rel = record['relationship']
                 
                 fact = f"- [{s_label}] `{src}` ──[{rel}]──► [{t_label}] `{tgt}`"
@@ -107,109 +124,169 @@ def fetch_threat_subgraph(entities: List[str]):
                     facts.append(fact)
                     nodes_dict[src] = s_label
                     nodes_dict[tgt] = t_label
+                    nodes_meta[src] = {"label": s_label, "props": s_props}
+                    nodes_meta[tgt] = {"label": t_label, "props": t_props}
                     edges_list.append({"from": src, "to": tgt, "label": rel})
                     
-    return facts, nodes_dict, edges_list
+    return facts, nodes_dict, edges_list, nodes_meta
 
 def answer_threat_query(query: str, facts: List[str]) -> str:
     return synthesize_technical_report(facts, query, client=client)
 
-# 2D Attack Graph Visualization with Vis.js (Fine-Tuned & High-Readability)
-def render_attack_graph(nodes_dict, edges):
-    # Professional SOC theme palette
+def get_node_level(label: str, name: str, props: dict) -> int:
+    lbl = (label or "").lower()
+    nm = (name or "").lower()
+    if "threatactor" in lbl or "actor" in lbl:
+        return 1
+    if "technique" in lbl or "ttp" in lbl:
+        return 2
+    if "vulnerability" in lbl or "cve" in lbl:
+        return 3
+    if "softwarepackage" in lbl or "package" in lbl:
+        return 4
+    if "githubrepo" in lbl or "repo" in lbl:
+        return 4
+    if "enterpriseservice" in lbl or "service" in lbl:
+        zone = (props.get("zone", "") if props else "").lower()
+        tier = (props.get("tier", "") if props else "").lower()
+        status = (props.get("status", "") if props else "").lower()
+        if "ingress" in nm or "gateway" in nm or "vpn" in nm or "bastion" in nm or "dmz" in zone or "perimeter" in tier or "exposed" in status:
+            return 5
+        return 6
+    if "remediation" in lbl or "patch" in lbl or "control" in lbl:
+        return 7
+    return 4
+
+# 2D Attack Graph Visualization with Vis.js (Tactical Cybersecurity Console)
+def render_attack_graph(nodes_dict, edges, nodes_meta=None):
     theme = {
         "GitHubRepo": {
-            "bg": "#5B21B6", "border": "#A78BFA", "highlight": "#7C3AED",
+            "bg": "#2E1065", "border": "#A855F7", "highlight": "#9333EA",
             "icon": "🐙", "badge": "Repo"
         },
         "ThreatActor": {
-            "bg": "#991B1B", "border": "#F87171", "highlight": "#DC2626",
-            "icon": "👤", "badge": "Adversary"
+            "bg": "#3B0D0C", "border": "#EF4444", "highlight": "#DC2626",
+            "icon": "💀", "badge": "Adversary"
         },
         "AttackTechnique": {
-            "bg": "#9A3412", "border": "#FB923C", "highlight": "#EA580C",
-            "icon": "⚡", "badge": "Technique"
+            "bg": "#381404", "border": "#F97316", "highlight": "#EA580C",
+            "icon": "⚡", "badge": "MITRE TTP"
         },
         "Vulnerability": {
-            "bg": "#9F1239", "border": "#FB7185", "highlight": "#E11D48",
-            "icon": "🚨", "badge": "CVE"
+            "bg": "#4C0519", "border": "#F43F5E", "highlight": "#E11D48",
+            "icon": "🚨", "badge": "CVE Flaw"
         },
         "SoftwarePackage": {
-            "bg": "#854D0E", "border": "#FACC15", "highlight": "#CA8A04",
+            "bg": "#362003", "border": "#EAB308", "highlight": "#CA8A04",
             "icon": "📦", "badge": "Package"
         },
         "EnterpriseService": {
-            "bg": "#075985", "border": "#38BDF8", "highlight": "#0284C7",
-            "icon": "🖥️", "badge": "Service"
+            "bg": "#082F49", "border": "#06B6D4", "highlight": "#0284C7",
+            "icon": "🌐", "badge": "DMZ Ingress"
+        },
+        "EnterpriseService_Core": {
+            "bg": "#1E1B4B", "border": "#818CF8", "highlight": "#6366F1",
+            "icon": "🏛️", "badge": "Tier-0 Asset"
         },
         "RemediationPatch": {
-            "bg": "#065F46", "border": "#34D399", "highlight": "#059669",
+            "bg": "#022C22", "border": "#10B981", "highlight": "#059669",
             "icon": "🛡️", "badge": "Remediation"
         },
         "SecurityControl": {
-            "bg": "#374151", "border": "#9CA3AF", "highlight": "#4B5563",
+            "bg": "#1F2937", "border": "#9CA3AF", "highlight": "#4B5563",
             "icon": "🔒", "badge": "Control"
         }
     }
 
     edge_color_map = {
-        "EXPLOITS": "#F43F5E",
-        "EXPLOITS_FLAW_IN": "#F43F5E",
-        "TARGETS": "#F43F5E",
-        "TARGETS_VULNERABILITY": "#F43F5E",
-        "CAN_PIVOT_TO": "#FB923C",
-        "LATERAL_MOVEMENT": "#FB923C",
-        "MITIGATED_BY": "#34D399",
-        "PROTECTED_BY": "#34D399",
-        "LEVERAGES": "#C084FC",
-        "INCLUDES": "#38BDF8",
-        "DEPENDS_ON": "#38BDF8",
-        "RUNS_SOFTWARE": "#38BDF8"
+        "EXPLOITS": "#EF4444",
+        "EXPLOITS_FLAW_IN": "#EF4444",
+        "TARGETS": "#EF4444",
+        "TARGETS_VULNERABILITY": "#EF4444",
+        "CAN_PIVOT_TO": "#F97316",
+        "LATERAL_MOVEMENT": "#F97316",
+        "MITIGATED_BY": "#10B981",
+        "PROTECTED_BY": "#10B981",
+        "LEVERAGES": "#A855F7",
+        "INCLUDES": "#0EA5E9",
+        "DEPENDS_ON": "#0EA5E9",
+        "RUNS_SOFTWARE": "#0EA5E9"
     }
 
     vis_nodes = []
+    nodes_client_meta = {}
+    
     for name, label in nodes_dict.items():
-        style = theme.get(label, {
-            "bg": "#1E293B", "border": "#94A3B8", "highlight": "#334155",
+        props = {}
+        if nodes_meta and name in nodes_meta:
+            props = nodes_meta[name].get("props", {})
+            
+        level = get_node_level(label, name, props)
+        
+        lookup_label = label
+        if label == "EnterpriseService" and level == 6:
+            lookup_label = "EnterpriseService_Core"
+            
+        style = theme.get(lookup_label, {
+            "bg": "#0F172A", "border": "#64748B", "highlight": "#475569",
             "icon": "🔹", "badge": label
         })
         
-        # Clean formatted display label with smart truncation
-        short_title = name
-        subtitle = ""
-        
-        if label == "SoftwarePackage":
+        if label == "ThreatActor":
+            primary = name.split("(")[0].strip()
+            tier = props.get("tier", "State-Sponsored APT")
+            display_label = f"[{style['badge'].upper()}]\n{style['icon']} {primary}\n{tier}"
+        elif label == "Vulnerability":
+            cve_id = name.split("(")[0].strip()
+            cve_alias = name.split("(")[1].replace(")", "").strip() if "(" in name else ""
+            cvss = props.get("cvss", "10.0")
+            epss = props.get("epss", "").split(" ")[0]
+            metric_str = f"CVSS {cvss}" + (f" • {epss}" if epss else "")
+            display_label = f"[{style['badge'].upper()}]\n{style['icon']} {cve_id}"
+            if cve_alias:
+                display_label += f"\n({cve_alias})"
+            display_label += f"\n{metric_str}"
+        elif label == "EnterpriseService":
+            cloud = props.get("cloud", "")
+            cloud_short = cloud.split(" ")[0] if cloud else ""
+            display_label = f"[{style['badge'].upper()}]\n{style['icon']} {name}"
+            if cloud_short:
+                display_label += f"\n[{cloud_short}]"
+        elif label == "AttackTechnique":
+            t_id = props.get("id", "")
+            tactic = props.get("tactic", "")
+            clean_name = name[:22] + "..." if len(name) > 22 else name
+            badge_txt = f"{style['badge'].upper()}: {t_id}" if t_id else style['badge'].upper()
+            display_label = f"[{badge_txt}]\n{style['icon']} {clean_name}"
+            if tactic:
+                display_label += f"\n<{tactic}>"
+        elif label == "SoftwarePackage":
             parts = name.split(":")
             if len(parts) >= 3:
-                short_title = parts[1]
-                subtitle = f"v{parts[2]}"
+                pkg_show = f"{parts[1]} v{parts[2]}"
             elif len(parts) == 2:
-                short_title = parts[0]
-                subtitle = f"v{parts[1]}"
-        elif label == "Vulnerability":
-            if "(" in name and ")" in name:
-                parts = name.split("(")
-                subtitle = parts[0].strip()
-                short_title = parts[1].replace(")", "").strip()
-        elif label == "ThreatActor":
-            if "(" in name:
-                short_title = name.replace("(", "\n(").strip()
+                pkg_show = f"{parts[0]} v{parts[1]}"
+            else:
+                pkg_show = name
+            display_label = f"[{style['badge'].upper()}]\n{style['icon']} {pkg_show}"
         elif label == "RemediationPatch":
-            parts = name.split("(")
-            short_title = parts[0].strip()
-            if len(parts) > 1:
-                subtitle = parts[1].replace(")", "").strip()
+            clean_p = name.split("(")[0].strip()[:24]
+            bulletin = props.get("bulletin", "").split("/")[0].strip()
+            display_label = f"[{style['badge'].upper()}]\n{style['icon']} {clean_p}"
+            if bulletin:
+                display_label += f"\n{bulletin[:22]}"
         elif label == "GitHubRepo":
-            short_title = name.replace("Repo: ", "").strip()
-            
-        display_label = f"[{style['badge'].upper()}]\n{style['icon']} {short_title}"
-        if subtitle:
-            display_label += f"\n({subtitle})"
+            clean_r = name.replace("Repo: ", "").strip()
+            display_label = f"[{style['badge'].upper()}]\n{style['icon']} {clean_r}"
+        else:
+            clean_n = name[:26] + "..." if len(name) > 26 else name
+            display_label = f"[{style['badge'].upper()}]\n{style['icon']} {clean_n}"
             
         vis_nodes.append({
             "id": name,
             "label": display_label,
-            "title": f"<b>[{label}]</b><br>{name}",
+            "level": level,
+            "title": f"<b>[{label}]</b> {name}",
             "color": {
                 "background": style["bg"],
                 "border": style["border"],
@@ -224,8 +301,8 @@ def render_attack_graph(nodes_dict, edges):
             },
             "font": {
                 "color": "#F8FAFC",
-                "size": 12,
-                "face": "system-ui, -apple-system, Segoe UI, Roboto, sans-serif",
+                "size": 11,
+                "face": "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
                 "align": "center"
             },
             "shape": "box",
@@ -238,17 +315,27 @@ def render_attack_graph(nodes_dict, edges):
             "shadow": {
                 "enabled": True,
                 "color": "rgba(0,0,0,0.6)",
-                "size": 8,
+                "size": 10,
                 "x": 2,
                 "y": 2
             }
         })
+        
+        nodes_client_meta[name] = {
+            "id": name,
+            "label": label,
+            "badge": style["badge"],
+            "icon": style["icon"],
+            "level": level,
+            "props": props
+        }
         
     vis_edges = []
     for e in edges:
         lbl = e["label"]
         edge_color = edge_color_map.get(lbl, "#94A3B8")
         is_critical = lbl in ["EXPLOITS", "EXPLOITS_FLAW_IN", "CAN_PIVOT_TO", "LATERAL_MOVEMENT"]
+        is_mitigation = lbl in ["MITIGATED_BY", "PROTECTED_BY"]
         
         vis_edges.append({
             "from": e["from"],
@@ -267,20 +354,24 @@ def render_attack_graph(nodes_dict, edges):
                 "hover": "#FFFFFF"
             },
             "width": 2.5 if is_critical else 1.8,
-            "dashes": True if lbl in ["MITIGATED_BY", "PROTECTED_BY"] else False,
+            "dashes": True if (is_mitigation or lbl in ["CAN_PIVOT_TO", "LATERAL_MOVEMENT"]) else False,
             "font": {
-                "size": 10,
-                "color": "#E2E8F0",
-                "background": "#0F172A",
+                "size": 9,
+                "color": "#CBD5E1",
+                "background": "#070B14",
                 "strokeWidth": 0,
                 "align": "horizontal"
             },
             "smooth": {
                 "type": "curvedCW",
-                "roundness": 0.16
+                "roundness": 0.14
             }
         })
         
+    nodes_json = json.dumps(vis_nodes)
+    edges_json = json.dumps(vis_edges)
+    meta_json = json.dumps(nodes_client_meta)
+    
     html = f"""
     <!DOCTYPE html>
     <html>
@@ -290,111 +381,392 @@ def render_attack_graph(nodes_dict, edges):
         body {{
           margin: 0;
           padding: 0;
-          font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+          font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
           background-color: transparent;
+          color: #E2E8F0;
         }}
         #graph-wrapper {{
           position: relative;
           width: 100%;
-          height: 600px;
-          border: 1px solid #334155;
+          height: 700px;
+          border: 1px solid #1E293B;
           border-radius: 10px;
-          background: radial-gradient(circle at 50% 50%, #111827 0%, #0B0F19 100%);
+          background: radial-gradient(circle at 50% 50%, #0F172A 0%, #070B14 100%);
           overflow: hidden;
-          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+          display: flex;
+          flex-direction: column;
         }}
         #network {{
           width: 100%;
-          height: 100%;
+          height: 495px;
+          background: transparent;
         }}
         .toolbar {{
           position: absolute;
-          top: 12px;
+          top: 10px;
           right: 12px;
           z-index: 100;
           display: flex;
-          gap: 6px;
-          background: rgba(15, 23, 42, 0.85);
-          backdrop-filter: blur(4px);
+          gap: 5px;
+          background: rgba(11, 17, 32, 0.9);
+          backdrop-filter: blur(6px);
           padding: 5px 8px;
           border-radius: 6px;
           border: 1px solid #334155;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.5);
         }}
         .tool-btn {{
           background: #1E293B;
-          color: #E2E8F0;
+          color: #CBD5E1;
           border: 1px solid #475569;
           border-radius: 4px;
-          padding: 4px 10px;
+          padding: 4px 9px;
           font-size: 11px;
           font-weight: 600;
           cursor: pointer;
           transition: all 0.15s ease;
+          font-family: inherit;
         }}
         .tool-btn:hover {{
           background: #3B82F6;
           border-color: #60A5FA;
           color: #FFFFFF;
         }}
+        .tool-btn.active-mode {{
+          background: #2563EB;
+          border-color: #93C5FD;
+          color: #FFFFFF;
+          box-shadow: 0 0 8px rgba(37, 99, 235, 0.6);
+        }}
+        .divider {{
+          width: 1px;
+          background: #334155;
+          margin: 0 2px;
+        }}
+        .tactical-hud {{
+          height: 205px;
+          background: #070B14;
+          border-top: 1px solid #1E293B;
+          padding: 10px 14px;
+          box-sizing: border-box;
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          overflow-y: auto;
+        }}
+        .hud-bar {{
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          border-bottom: 1px solid #1E293B;
+          padding-bottom: 6px;
+        }}
+        .hud-status {{
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }}
+        .hud-pulse {{
+          width: 8px;
+          height: 8px;
+          background: #10B981;
+          border-radius: 50%;
+          box-shadow: 0 0 8px #10B981;
+          animation: pulse 2s infinite;
+        }}
+        @keyframes pulse {{
+          0% {{ opacity: 1; transform: scale(1); }}
+          50% {{ opacity: 0.4; transform: scale(0.9); }}
+          100% {{ opacity: 1; transform: scale(1); }}
+        }}
+        .hud-title {{
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 1px;
+          color: #94A3B8;
+        }}
+        .hud-hint {{
+          font-size: 11px;
+          color: #64748B;
+        }}
+        .hud-empty {{
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          color: #64748B;
+          font-size: 12px;
+          margin-top: 30px;
+          justify-content: center;
+        }}
+        .hud-grid {{
+          display: grid;
+          grid-template-columns: 1.4fr 1.3fr 1.3fr;
+          gap: 12px;
+          font-size: 11px;
+        }}
+        .hud-card {{
+          background: #0B1120;
+          border: 1px solid #1E293B;
+          border-radius: 6px;
+          padding: 8px 10px;
+          max-height: 145px;
+          overflow-y: auto;
+        }}
+        .hud-card-title {{
+          font-size: 10px;
+          font-weight: 700;
+          color: #38BDF8;
+          margin-bottom: 6px;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        }}
+        .hud-badge {{
+          display: inline-block;
+          padding: 2px 6px;
+          border-radius: 4px;
+          font-weight: 700;
+          font-size: 10px;
+          margin-right: 4px;
+          margin-bottom: 4px;
+        }}
+        .hud-tag-in {{
+          background: rgba(239, 68, 68, 0.12);
+          border: 1px solid rgba(239, 68, 68, 0.35);
+          color: #FCA5A5;
+          padding: 3px 6px;
+          border-radius: 4px;
+          font-size: 10px;
+          margin-bottom: 4px;
+          display: block;
+          word-break: break-all;
+        }}
+        .hud-tag-out {{
+          background: rgba(249, 115, 22, 0.12);
+          border: 1px solid rgba(249, 115, 22, 0.35);
+          color: #FDBA74;
+          padding: 3px 6px;
+          border-radius: 4px;
+          font-size: 10px;
+          margin-bottom: 4px;
+          display: block;
+          word-break: break-all;
+        }}
       </style>
     </head>
     <body>
       <div id="graph-wrapper">
         <div class="toolbar">
+          <button class="tool-btn active-mode" id="btn-lr" onclick="setHierarchy('LR')">🏛️ Kill-Chain (LR)</button>
+          <button class="tool-btn" id="btn-ud" onclick="setHierarchy('UD')">🔻 Kill-Chain (UD)</button>
+          <button class="tool-btn" id="btn-force" onclick="setForceDirected()">🪐 Force-Directed</button>
+          <span class="divider"></span>
           <button class="tool-btn" onclick="network.moveTo({{scale: network.getScale() * 1.3}})">🔍 +</button>
           <button class="tool-btn" onclick="network.moveTo({{scale: network.getScale() * 0.7}})">🔍 -</button>
           <button class="tool-btn" onclick="network.fit({{animation: {{duration: 400}}}})">🎯 Fit</button>
           <button class="tool-btn" id="freeze-btn" onclick="togglePhysics()">⏸️ Freeze</button>
         </div>
         <div id="network"></div>
+        <div id="hud-panel" class="tactical-hud">
+          <div class="hud-bar">
+            <div class="hud-status">
+              <span class="hud-pulse"></span>
+              <span class="hud-title">TACTICAL ENTITY INSPECTOR</span>
+            </div>
+            <span id="hud-subtitle" class="hud-hint">Click any graph node to inspect telemetry & attack vectors</span>
+          </div>
+          <div id="hud-content">
+            <div class="hud-empty">
+              <span style="font-size: 20px;">🎯</span>
+              <span>Click any node in the attack graph above to inspect technical telemetry, attack vectors, and lateral blast radius.</span>
+            </div>
+          </div>
+        </div>
       </div>
 
       <script type="text/javascript">
-        var nodes = new vis.DataSet({json.dumps(vis_nodes)});
-        var edges = new vis.DataSet({json.dumps(vis_edges)});
+        var visNodes = {nodes_json};
+        var visEdges = {edges_json};
+        var nodesMeta = {meta_json};
+        
+        var nodes = new vis.DataSet(visNodes);
+        var edges = new vis.DataSet(visEdges);
         var container = document.getElementById('network');
         var data = {{ nodes: nodes, edges: edges }};
         
         var options = {{
-          physics: {{
-            enabled: true,
-            solver: 'forceAtlas2Based',
-            forceAtlas2Based: {{
-              gravitationalConstant: -75,
-              centralGravity: 0.015,
-              springLength: 180,
-              springConstant: 0.08,
-              damping: 0.45,
-              avoidOverlap: 1.0
-            }},
-            stabilization: {{
+          layout: {{
+            hierarchical: {{
               enabled: true,
-              iterations: 200,
-              updateInterval: 25
+              direction: 'LR',
+              sortMethod: 'directed',
+              levelSeparation: 260,
+              nodeSpacing: 110,
+              treeSpacing: 140,
+              parentCentralization: true,
+              edgeMinimization: true
             }}
+          }},
+          physics: {{
+            enabled: false
           }},
           interaction: {{
             hover: true,
-            tooltipDelay: 100,
+            tooltipDelay: 80,
             zoomView: true,
-            dragView: true
+            dragView: true,
+            selectable: true,
+            multiselect: false
           }}
         }};
         
         var network = new vis.Network(container, data, options);
-        var physicsEnabled = true;
+        var physicsEnabled = false;
+        
+        function setHierarchy(dir) {{
+          setActiveBtn(dir === 'LR' ? 'btn-lr' : 'btn-ud');
+          network.setOptions({{
+            layout: {{
+              hierarchical: {{
+                enabled: true,
+                direction: dir,
+                sortMethod: 'directed',
+                levelSeparation: dir === 'LR' ? 260 : 130,
+                nodeSpacing: dir === 'LR' ? 110 : 220,
+                treeSpacing: 150,
+                parentCentralization: true,
+                edgeMinimization: true
+              }}
+            }},
+            physics: {{ enabled: false }}
+          }});
+          physicsEnabled = false;
+          document.getElementById('freeze-btn').innerText = '⏸️ Freeze';
+          setTimeout(function() {{ network.fit({{ animation: {{ duration: 400 }} }}); }}, 80);
+        }}
+        
+        function setForceDirected() {{
+          setActiveBtn('btn-force');
+          physicsEnabled = true;
+          document.getElementById('freeze-btn').innerText = '⏸️ Freeze';
+          network.setOptions({{
+            layout: {{ hierarchical: {{ enabled: false }} }},
+            physics: {{
+              enabled: true,
+              solver: 'forceAtlas2Based',
+              forceAtlas2Based: {{
+                gravitationalConstant: -75,
+                centralGravity: 0.015,
+                springLength: 180,
+                springConstant: 0.08,
+                damping: 0.45,
+                avoidOverlap: 1.0
+              }},
+              stabilization: {{ enabled: true, iterations: 150 }}
+            }}
+          }});
+        }}
         
         function togglePhysics() {{
           physicsEnabled = !physicsEnabled;
           network.setOptions({{ physics: {{ enabled: physicsEnabled }} }});
-          var btn = document.getElementById('freeze-btn');
-          btn.innerText = physicsEnabled ? '⏸️ Freeze' : '▶️ Unfreeze';
+          document.getElementById('freeze-btn').innerText = physicsEnabled ? '⏸️ Freeze' : '▶️ Unfreeze';
+        }}
+        
+        function setActiveBtn(btnId) {{
+          ['btn-lr', 'btn-ud', 'btn-force'].forEach(function(id) {{
+            var b = document.getElementById(id);
+            if (b) b.classList.remove('active-mode');
+          }});
+          var active = document.getElementById(btnId);
+          if (active) active.classList.add('active-mode');
+        }}
+        
+        network.on("selectNode", function(params) {{
+          if (params.nodes.length > 0) {{
+            inspectNode(params.nodes[0]);
+          }}
+        }});
+        
+        network.on("deselectNode", function(params) {{
+          resetHUD();
+        }});
+        
+        function inspectNode(nodeId) {{
+          var meta = nodesMeta[nodeId] || {{ label: "Entity", props: {{}} }};
+          var p = meta.props || {{}};
+          
+          var allEdges = edges.get();
+          var inbound = allEdges.filter(function(e) {{ return e.to === nodeId; }});
+          var outbound = allEdges.filter(function(e) {{ return e.from === nodeId; }});
+          
+          var html = '<div class="hud-grid">';
+          
+          // Column 1: Node Entity & Telemetry
+          html += '<div class="hud-card">';
+          html += '<div class="hud-card-title">🔍 ENTITY TELEMETRY</div>';
+          html += '<div style="font-weight: 700; color: #FFFFFF; font-size: 12px; margin-bottom: 6px;">' + (meta.icon || '🔹') + ' ' + nodeId + '</div>';
+          
+          if (p.cvss) {{
+            html += '<div><span class="hud-badge" style="background:#EF4444;color:#FFF;">CVSS ' + p.cvss + '</span>';
+            if (p.epss) html += '<span class="hud-badge" style="background:#B91C1C;color:#FFF;">EPSS ' + p.epss.split(' ')[0] + '</span>';
+            html += '</div>';
+          }}
+          if (p.vector) html += '<div style="color:#94A3B8;font-size:10px;margin-top:4px;">Vector: <code style="color:#FCA5A5;">' + p.vector + '</code></div>';
+          if (p.cisa_kev) html += '<div style="color:#F87171;font-size:10px;margin-top:2px;">⚠️ ' + p.cisa_kev + '</div>';
+          
+          if (p.cloud) html += '<div style="color:#38BDF8;font-size:10px;margin-top:4px;">☁️ ' + p.cloud + '</div>';
+          if (p.zone) html += '<div style="color:#94A3B8;font-size:10px;">Subnet: ' + p.zone + '</div>';
+          if (p.iam_role) html += '<div style="color:#94A3B8;font-size:10px;">IAM: <code style="color:#A78BFA;">' + p.iam_role + '</code></div>';
+          
+          if (p.mitre_id) html += '<div><span class="hud-badge" style="background:#7C3AED;color:#FFF;">' + p.mitre_id + '</span> <span style="color:#C4B5FD;">' + (p.origin || '') + '</span></div>';
+          if (p.motive) html += '<div style="color:#94A3B8;font-size:10px;margin-top:2px;">Motive: ' + p.motive + '</div>';
+          
+          if (p.bulletin) html += '<div style="color:#34D399;font-size:10px;margin-top:4px;">📋 ' + p.bulletin + '</div>';
+          if (p.hotfix) html += '<div style="color:#A7F3D0;font-size:10px;margin-top:2px;">Fix: <code>' + p.hotfix + '</code></div>';
+          html += '</div>';
+          
+          // Column 2: Inbound Attack Vectors
+          html += '<div class="hud-card">';
+          html += '<div class="hud-card-title">⬅ INBOUND ATTACK VECTORS (' + inbound.length + ')</div>';
+          if (inbound.length === 0) {{
+            html += '<div style="color:#64748B;font-size:10px;">No inbound exploitation paths (Perimeter / Root)</div>';
+          }} else {{
+            for (var i = 0; i < inbound.length; i++) {{
+              var ie = inbound[i];
+              html += '<div class="hud-tag-in">⬅ <b>' + ie.from + '</b><br><span style="color:#F87171;">[' + ie.label + ']</span></div>';
+            }}
+          }}
+          html += '</div>';
+          
+          // Column 3: Outbound Blast Radius
+          html += '<div class="hud-card">';
+          html += '<div class="hud-card-title">➔ BLAST RADIUS / LATERAL MOVES (' + outbound.length + ')</div>';
+          if (outbound.length === 0) {{
+            html += '<div style="color:#64748B;font-size:10px;">Terminal target / Countermeasure leaf node</div>';
+          }} else {{
+            for (var j = 0; j < outbound.length; j++) {{
+              var oe = outbound[j];
+              html += '<div class="hud-tag-out">➔ <span style="color:#FBBF24;">[' + oe.label + ']</span><br><b>' + oe.to + '</b></div>';
+            }}
+          }}
+          html += '</div>';
+          
+          html += '</div>';
+          
+          document.getElementById('hud-content').innerHTML = html;
+          document.getElementById('hud-subtitle').innerText = 'Inspecting: ' + nodeId;
+        }}
+        
+        function resetHUD() {{
+          document.getElementById('hud-content').innerHTML = '<div class="hud-empty"><span style="font-size: 20px;">🎯</span><span>Click any node in the attack graph above to inspect technical telemetry, attack vectors, and lateral blast radius.</span></div>';
+          document.getElementById('hud-subtitle').innerText = 'Click any graph node to inspect telemetry & attack vectors';
         }}
       </script>
     </body>
     </html>
     """
-    components.html(html, height=620)
+    components.html(html, height=720)
 
 # Layout
 col1, col2 = st.columns([1, 1])
@@ -404,8 +776,10 @@ with col1:
     
     with tab_query:
         sample_queries = [
-            "How can APT29 exploit our public-facing services to compromise internal payment processing, and what patch mitigates this?",
-            "What is the blast radius and attack path if CVE-2021-44228 (Log4Shell) is targeted against Customer-Auth-Service?",
+            "How can APT29 exploit our public-facing services (e.g. k8s-auth-ingress-gateway) to compromise payment-token-vault-service, and what patch mitigates this?",
+            "What is the downstream blast radius and lateral movement path if CVE-2021-44228 (Log4Shell) is targeted against k8s-auth-ingress-gateway?",
+            "Evaluate how Volt Typhoon pre-positions in edge-vpn-gateway-fortigate to pivot into corporate-active-directory-dc01.",
+            "Analyze the supply chain compromise vector for CVE-2024-3094 (XZ Utils) against enterprise-bastion-ssh-host and its data lake blast radius.",
             "Which threat actors leverage Supply Chain Compromise, and which software packages and infrastructure are affected?"
         ]
         selected_sample = st.selectbox("Select a Preset Threat Scenario (or write your own below):", sample_queries)
@@ -415,7 +789,7 @@ with col1:
         if st.button("🚨 Analyze Attack Graph & Blast Radius", type="primary"):
             with st.spinner("Traversing Cyber Threat Graph & Synthesizing SOC Report..."):
                 entities = extract_entities(user_query)
-                facts, nodes_dict, edges = fetch_threat_subgraph(entities)
+                facts, nodes_dict, edges, nodes_meta = fetch_threat_subgraph(entities)
                 answer = answer_threat_query(user_query, facts)
                 
                 st.session_state["answer"] = answer
@@ -423,6 +797,7 @@ with col1:
                 st.session_state["facts"] = facts
                 st.session_state["nodes_dict"] = nodes_dict
                 st.session_state["edges"] = edges
+                st.session_state["nodes_meta"] = nodes_meta
 
         if "answer" in st.session_state:
             st.markdown("### 📋 SOC Threat Intelligence Report")
@@ -492,6 +867,7 @@ with col1:
                             
                             st.session_state["nodes_dict"] = eval_res["vis_graph"]["nodes"]
                             st.session_state["edges"] = eval_res["vis_graph"]["edges"]
+                            st.session_state["nodes_meta"] = eval_res["vis_graph"].get("nodes_meta", {})
                             st.session_state["entities"] = list(eval_res["vis_graph"]["nodes"].keys())
                             
                             ai_soc_report = generate_ai_repo_audit_report(repo_id, eval_res, gemini_api_key=GEMINI_API_KEY)
@@ -551,13 +927,26 @@ with col1:
                         findings = []
                         infected_nodes = {}
                         infected_edges = []
+                        nodes_meta = {}
                         all_cves = set()
                         all_actors = set()
                         
                         with driver.session() as session:
                             for svc in sbom_data["services"]:
                                 s_name = svc["name"]
+                                svc_rec = session.run("MATCH (s:EnterpriseService {name: $name}) RETURN properties(s) AS props", name=s_name).single()
+                                s_props = dict(svc_rec["props"]) if svc_rec else {}
                                 infected_nodes[s_name] = "EnterpriseService"
+                                nodes_meta[s_name] = {"label": "EnterpriseService", "props": s_props}
+                                
+                                # Discover lateral movement blast radius
+                                for piv_rec in session.run("MATCH (s:EnterpriseService {name: $name})-[:CAN_PIVOT_TO]->(p:EnterpriseService) RETURN p.name AS p_name, properties(p) AS p_props", name=s_name):
+                                    piv_name = piv_rec["p_name"]
+                                    piv_props = dict(piv_rec["p_props"])
+                                    infected_nodes[piv_name] = "EnterpriseService"
+                                    nodes_meta[piv_name] = {"label": "EnterpriseService", "props": piv_props}
+                                    infected_edges.append({"from": s_name, "to": piv_name, "label": "CAN_PIVOT_TO"})
+
                                 for dep in svc["dependencies"]:
                                     dep_search = dep.split(":")[1] if ":" in dep else dep
                                     cypher = """
@@ -568,18 +957,22 @@ with col1:
                                     OPTIONAL MATCH (actor:ThreatActor)-[:LEVERAGES]->(tech)
                                     OPTIONAL MATCH (v)-[:MITIGATED_BY]->(patch:RemediationPatch)
                                     RETURN 
-                                        p.name AS pkg, v.name AS cve, v.cvss AS cvss, v.type AS vuln_type,
-                                        actor.name AS actor, patch.name AS patch
+                                        p.name AS pkg, properties(p) AS pkg_props,
+                                        v.name AS cve, properties(v) AS vuln_props,
+                                        actor.name AS actor, properties(actor) AS actor_props,
+                                        patch.name AS patch, properties(patch) AS patch_props,
+                                        tech.name AS tech, properties(tech) AS tech_props
                                     """
                                     for r in session.run(cypher, dep_name=dep_search):
                                         if r["cve"]:
                                             all_cves.add(r["cve"])
                                             if r["actor"]: all_actors.add(r["actor"])
+                                            v_props = dict(r["vuln_props"]) if r["vuln_props"] else {}
                                             findings.append({
                                                 "Service": s_name,
                                                 "Vulnerable Package": dep,
                                                 "CVE": r["cve"],
-                                                "CVSS": r["cvss"],
+                                                "CVSS": v_props.get("cvss", 9.8),
                                                 "Threat Actor": r["actor"] or "Undisclosed",
                                                 "Remediation Patch": r["patch"] or "Vendor Update"
                                             })
@@ -587,15 +980,34 @@ with col1:
                                             cve_name = r["cve"]
                                             infected_nodes[pkg_name] = "SoftwarePackage"
                                             infected_nodes[cve_name] = "Vulnerability"
+                                            nodes_meta[pkg_name] = {"label": "SoftwarePackage", "props": dict(r["pkg_props"]) if r["pkg_props"] else {}}
+                                            nodes_meta[cve_name] = {"label": "Vulnerability", "props": v_props}
+                                            
                                             infected_edges.append({"from": s_name, "to": pkg_name, "label": "DEPENDS_ON"})
                                             infected_edges.append({"from": cve_name, "to": pkg_name, "label": "EXPLOITS"})
+                                            
                                             if r["actor"]:
                                                 act_name = r["actor"]
                                                 infected_nodes[act_name] = "ThreatActor"
-                                                infected_edges.append({"from": act_name, "to": cve_name, "label": "TARGETS"})
+                                                nodes_meta[act_name] = {"label": "ThreatActor", "props": dict(r["actor_props"]) if r["actor_props"] else {}}
+                                                if r["tech"]:
+                                                    t_name = r["tech"]
+                                                    infected_nodes[t_name] = "AttackTechnique"
+                                                    nodes_meta[t_name] = {"label": "AttackTechnique", "props": dict(r["tech_props"]) if r["tech_props"] else {}}
+                                                    infected_edges.append({"from": act_name, "to": t_name, "label": "LEVERAGES"})
+                                                    infected_edges.append({"from": t_name, "to": cve_name, "label": "TARGETS"})
+                                                else:
+                                                    infected_edges.append({"from": act_name, "to": cve_name, "label": "TARGETS"})
+                                                    
+                                            if r["patch"]:
+                                                patch_name = r["patch"]
+                                                infected_nodes[patch_name] = "RemediationPatch"
+                                                nodes_meta[patch_name] = {"label": "RemediationPatch", "props": dict(r["patch_props"]) if r["patch_props"] else {}}
+                                                infected_edges.append({"from": cve_name, "to": patch_name, "label": "MITIGATED_BY"})
 
                         st.session_state["nodes_dict"] = infected_nodes
                         st.session_state["edges"] = infected_edges
+                        st.session_state["nodes_meta"] = nodes_meta
                         st.session_state["entities"] = list(infected_nodes.keys())
                         
                         st.error(f"🚨 ALERT: {len(all_cves)} Critical Zero-Day Vulnerabilities Detected in Deployment!")
@@ -647,17 +1059,18 @@ with col2:
     st.subheader("🕸️ Interactive Attack Graph & Blast Radius")
     st.markdown("""
     <div style="display: flex; flex-wrap: wrap; gap: 6px; font-size: 11px; margin-bottom: 10px; font-weight: 600;">
-        <span style="background: #5B21B6; color: #EDE9FE; padding: 3px 8px; border-radius: 4px; border: 1px solid #7C3AED;">🐙 Repo</span>
-        <span style="background: #991B1B; color: #FEE2E2; padding: 3px 8px; border-radius: 4px; border: 1px solid #EF4444;">👤 Adversary</span>
-        <span style="background: #9A3412; color: #FFEDD5; padding: 3px 8px; border-radius: 4px; border: 1px solid #FB923C;">⚡ Technique</span>
-        <span style="background: #9F1239; color: #FFE4E6; padding: 3px 8px; border-radius: 4px; border: 1px solid #FB7185;">🚨 CVE</span>
-        <span style="background: #854D0E; color: #FEF9C3; padding: 3px 8px; border-radius: 4px; border: 1px solid #FACC15;">📦 Package</span>
-        <span style="background: #075985; color: #E0F2FE; padding: 3px 8px; border-radius: 4px; border: 1px solid #38BDF8;">🖥️ Service</span>
-        <span style="background: #065F46; color: #D1FAE5; padding: 3px 8px; border-radius: 4px; border: 1px solid #34D399;">🛡️ Remediation</span>
+        <span style="background: #3B0D0C; color: #FCA5A5; padding: 3px 8px; border-radius: 4px; border: 1px solid #EF4444;">💀 Adversary</span>
+        <span style="background: #381404; color: #FDBA74; padding: 3px 8px; border-radius: 4px; border: 1px solid #F97316;">⚡ MITRE TTP</span>
+        <span style="background: #4C0519; color: #FDA4AF; padding: 3px 8px; border-radius: 4px; border: 1px solid #F43F5E;">🚨 CVE Flaw</span>
+        <span style="background: #362003; color: #FDE047; padding: 3px 8px; border-radius: 4px; border: 1px solid #EAB308;">📦 Package</span>
+        <span style="background: #082F49; color: #67E8F9; padding: 3px 8px; border-radius: 4px; border: 1px solid #06B6D4;">🌐 DMZ Ingress</span>
+        <span style="background: #1E1B4B; color: #C7D2FE; padding: 3px 8px; border-radius: 4px; border: 1px solid #818CF8;">🏛️ Tier-0 Asset</span>
+        <span style="background: #022C22; color: #6EE7B7; padding: 3px 8px; border-radius: 4px; border: 1px solid #10B981;">🛡️ Remediation</span>
+        <span style="background: #2E1065; color: #E9D5FF; padding: 3px 8px; border-radius: 4px; border: 1px solid #A855F7;">🐙 Repo</span>
     </div>
     """, unsafe_allow_html=True)
     if "edges" in st.session_state and st.session_state["edges"]:
-        st.caption(f"Showing attack path for: {', '.join(st.session_state['entities'])} (Click & Drag nodes)")
-        render_attack_graph(st.session_state["nodes_dict"], st.session_state["edges"])
+        st.caption(f"Showing attack path for: {', '.join(st.session_state.get('entities', []))} • (Click any node to inspect in HUD)")
+        render_attack_graph(st.session_state["nodes_dict"], st.session_state["edges"], st.session_state.get("nodes_meta"))
     else:
         st.info("Execute a threat scenario on the left to visualize the attack path and lateral movement graph!")
