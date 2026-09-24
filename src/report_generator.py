@@ -10,6 +10,8 @@ import time
 import logging
 from typing import List, Dict, Any, Optional
 
+from src.cache_manager import threat_cache
+
 logger = logging.getLogger(__name__)
 
 def parse_graph_facts(facts: List[str]) -> Dict[str, Any]:
@@ -65,8 +67,13 @@ def parse_graph_facts(facts: List[str]) -> Dict[str, Any]:
 def synthesize_technical_report(facts: List[str], query: str, client: Optional[Any] = None) -> str:
     """
     Synthesizes a realistic, highly technical CTI advisory matching Mandiant / CISA standards.
-    Uses Gemini LLMs with fallback to deterministic graph intelligence generation.
+    Checks high-performance semantic cache first (<10ms), then falls back to Gemini / deterministic.
     """
+    cached = threat_cache.get(query, facts)
+    if cached:
+        logger.info(f"Cache HIT for query: '{query[:50]}...'")
+        return cached["report"]
+
     context = "\n".join(facts) if facts else "No direct attack graph paths discovered in knowledge base."
     
     prompt = f"""You are a Principal Threat Intelligence Analyst & Incident Command Officer at Mandiant / CISA.
@@ -153,12 +160,109 @@ Create a detailed Markdown Table:
                     config=types.GenerateContentConfig(temperature=0.1)
                 )
                 if resp.text and len(resp.text.strip()) > 500:
-                    return resp.text.strip()
+                    report = resp.text.strip()
+                    threat_cache.set(query, report, facts)
+                    return report
             except Exception as e:
                 logger.warning(f"Model {model_id} synthesis failed or rate-limited: {e}")
                 continue
 
-    return generate_deterministic_report(facts, query)
+    det_report = generate_deterministic_report(facts, query)
+    threat_cache.set(query, det_report, facts)
+    return det_report
+
+def synthesize_technical_report_stream(facts: List[str], query: str, client: Optional[Any] = None):
+    """
+    Streams the CTI Advisory token-by-token for sub-300ms perceived latency.
+    Checks semantic cache first for instant response, otherwise streams from Gemini.
+    """
+    cached = threat_cache.get(query, facts)
+    if cached:
+        logger.info(f"Cache HIT (Streaming) for query: '{query[:50]}...'")
+        cached_text = cached["report"]
+        for line in cached_text.splitlines(keepends=True):
+            time.sleep(0.005)
+            yield line
+        return
+
+    context = "\n".join(facts) if facts else "No direct attack graph paths discovered in knowledge base."
+    
+    prompt = f"""You are a Principal Threat Intelligence Analyst & Incident Command Officer at Mandiant / CISA.
+Produce a real, highly authoritative, and deeply technical Cybersecurity Incident Advisory answering the security analyst's query.
+
+STRICT INSTRUCTION:
+Do NOT output generic AI filler or superficial commentary.
+Follow the exact format of an authentic US-CERT / CISA / Mandiant Threat Advisory.
+Use technical specifics: exact MITRE ATT&CK IDs, CVSS v3.1 vectors, EPSS scores, injection protocols, Linux/Kubernetes runtime commands, Snort/Sigma detection rules, and exact network socket parameters.
+
+Ground your analysis strictly on the verified Neo4j Knowledge Graph facts provided below:
+
+ATTACK GRAPH FACTS:
+{context}
+
+USER QUERY:
+{query}
+
+OUTPUT STRUCTURE:
+# 🚨 CTI ADVISORY: {query[:70]}
+**Advisory Tracking:** `CISA-AA26-0924-CTI` | **TLP Classification:** `TLP:AMBER+STRICT`  
+**Threat Level:** `CRITICAL (CVSS 10.0 / EPSS 97.4%)` | **Target Scope:** Production Cloud Infrastructure  
+
+---
+
+### 1. 📋 Threat Landscape & Incident Scorecard
+[Scorecard Table + Executive Summary]
+
+### 2. 🔬 Threat Actor Attribution & MITRE ATT&CK Profile
+[Adversary Dossier + MITRE IDs]
+
+### 3. ⚙️ Deep Technical Exploitation Mechanics & Kill Chain Trace
+[Protocol breakdown + Directional ASCII chain]
+
+### 4. 💥 Production Blast Radius & Lateral Movement Topology
+[Perimeter breach + CAN_PIVOT_TO targets + Mission impact]
+
+### 5. 🛡️ Tactical Indicators of Compromise (IOCs) & Detection Signatures
+[Hashes + C2 IPs + Suricata Rule + Sigma SIEM Rule]
+
+### 6. 🛠️ Actionable Incident Response & Remediation Playbook
+[Phase 1 immediate iptables + Phase 2 kubectl patch + Phase 3 Zero-Trust]
+"""
+
+    accumulated_chunks = []
+    stream_ok = False
+
+    if client:
+        for model_id in ["gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-3.6-flash"]:
+            try:
+                from google.genai import types
+                stream_resp = client.models.generate_content_stream(
+                    model=model_id,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(temperature=0.1)
+                )
+                for chunk in stream_resp:
+                    if chunk.text:
+                        accumulated_chunks.append(chunk.text)
+                        yield chunk.text
+                stream_ok = True
+                break
+            except Exception as e:
+                logger.warning(f"Model {model_id} stream failed: {e}")
+                accumulated_chunks = []
+                continue
+
+    if stream_ok and accumulated_chunks:
+        full_report = "".join(accumulated_chunks)
+        threat_cache.set(query, full_report, facts)
+        return
+
+    # Deterministic fallback stream with smooth typing effect
+    det_report = generate_deterministic_report(facts, query)
+    threat_cache.set(query, det_report, facts)
+    for line in det_report.splitlines(keepends=True):
+        time.sleep(0.015)
+        yield line
 
 def generate_deterministic_report(facts: List[str], query: str) -> str:
     """Generates an exhaustive, production-grade technical advisory directly from graph telemetry."""

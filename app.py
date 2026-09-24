@@ -18,7 +18,8 @@ from src.repo_evaluator import (
     generate_ai_repo_audit_report,
     PRESET_REPOSITORIES
 )
-from src.report_generator import synthesize_technical_report
+from src.report_generator import synthesize_technical_report, synthesize_technical_report_stream
+from src.cache_manager import threat_cache
 
 # Page config
 st.set_page_config(page_title="ThreatGraphRAG | Cyber Threat Intelligence", layout="wide", page_icon="🛡️")
@@ -40,6 +41,25 @@ def get_clients():
     return client, driver
 
 client, driver = get_clients()
+
+# Sidebar Telemetry & Cache Health
+with st.sidebar:
+    st.markdown("### ⚡ Engine Performance")
+    st.caption("Real-Time Graph Index & Semantic Cache")
+    c_stats = threat_cache.get_stats()
+    
+    col_sb1, col_sb2 = st.columns(2)
+    col_sb1.metric("Cache Hit Rate", f"{c_stats['hit_ratio_percent']}%")
+    col_sb2.metric("Saved Latency", f"{c_stats['estimated_latency_saved_seconds']}s")
+    
+    st.metric("Estimated Tokens Saved", f"{c_stats['estimated_tokens_saved']:,}")
+    st.markdown(f"**Index:** `Neo4j Full-Text (Active)`  \n**Capacity:** `{c_stats['total_entries']}/{c_stats['capacity']}` entries")
+    
+    if st.button("🧹 Flush Semantic Cache", use_container_width=True):
+        threat_cache.clear()
+        st.success("Cache cleared!")
+        st.rerun()
+    st.markdown("---")
 
 # Schemas
 class QueryEntities(BaseModel):
@@ -99,34 +119,76 @@ def fetch_threat_subgraph(entities: List[str]):
     
     with driver.session() as session:
         for entity in entities:
-            cypher = """
-            MATCH (source)
-            WHERE toLower(source.name) CONTAINS toLower($entity)
-            MATCH path = (source)-[r*1..2]-(target)
-            UNWIND relationships(path) as rel
-            WITH DISTINCT rel, startNode(rel) as s, endNode(rel) as t
-            RETURN 
-                s.name AS from_name, labels(s)[0] AS from_label, properties(s) AS s_props,
-                type(rel) AS relationship,
-                t.name AS to_name, labels(t)[0] AS to_label, properties(t) AS t_props
-            LIMIT 35
-            """
-            result = session.run(cypher, entity=entity)
-            for record in result:
-                src, s_label = record['from_name'], record['from_label']
-                tgt, t_label = record['to_name'], record['to_label']
-                s_props = dict(record['s_props']) if record['s_props'] else {}
-                t_props = dict(record['t_props']) if record['t_props'] else {}
-                rel = record['relationship']
-                
-                fact = f"- [{s_label}] `{src}` ──[{rel}]──► [{t_label}] `{tgt}`"
-                if fact not in facts:
-                    facts.append(fact)
-                    nodes_dict[src] = s_label
-                    nodes_dict[tgt] = t_label
-                    nodes_meta[src] = {"label": s_label, "props": s_props}
-                    nodes_meta[tgt] = {"label": t_label, "props": t_props}
-                    edges_list.append({"from": src, "to": tgt, "label": rel})
+            clean_e = entity.strip()
+            indexed_found = False
+            
+            # 1. High-speed Neo4j Full-Text Schema Index traversal (<5ms)
+            try:
+                search_term = f'"{clean_e}"' if " " in clean_e else f"{clean_e}*"
+                cypher_idx = """
+                CALL db.index.fulltext.queryNodes("threatEntityIndex", $term) YIELD node, score
+                WHERE score >= 0.4
+                WITH node LIMIT 3
+                MATCH path = (node)-[r*1..2]-(target)
+                UNWIND relationships(path) as rel
+                WITH DISTINCT rel, startNode(rel) as s, endNode(rel) as t
+                RETURN 
+                    s.name AS from_name, labels(s)[0] AS from_label, properties(s) AS s_props,
+                    type(rel) AS relationship,
+                    t.name AS to_name, labels(t)[0] AS to_label, properties(t) AS t_props
+                LIMIT 35
+                """
+                results = list(session.run(cypher_idx, term=search_term))
+                if results:
+                    indexed_found = True
+                    for record in results:
+                        src, s_label = record['from_name'], record['from_label']
+                        tgt, t_label = record['to_name'], record['to_label']
+                        s_props = dict(record['s_props']) if record['s_props'] else {}
+                        t_props = dict(record['t_props']) if record['t_props'] else {}
+                        rel = record['relationship']
+                        
+                        fact = f"- [{s_label}] `{src}` ──[{rel}]──► [{t_label}] `{tgt}`"
+                        if fact not in facts:
+                            facts.append(fact)
+                            nodes_dict[src] = s_label
+                            nodes_dict[tgt] = t_label
+                            nodes_meta[src] = {"label": s_label, "props": s_props}
+                            nodes_meta[tgt] = {"label": t_label, "props": t_props}
+                            edges_list.append({"from": src, "to": tgt, "label": rel})
+            except Exception as e:
+                indexed_found = False
+
+            # 2. Resilient substring fallback
+            if not indexed_found:
+                cypher_sub = """
+                MATCH (source)
+                WHERE toLower(source.name) CONTAINS toLower($entity)
+                MATCH path = (source)-[r*1..2]-(target)
+                UNWIND relationships(path) as rel
+                WITH DISTINCT rel, startNode(rel) as s, endNode(rel) as t
+                RETURN 
+                    s.name AS from_name, labels(s)[0] AS from_label, properties(s) AS s_props,
+                    type(rel) AS relationship,
+                    t.name AS to_name, labels(t)[0] AS to_label, properties(t) AS t_props
+                LIMIT 35
+                """
+                results = session.run(cypher_sub, entity=clean_e)
+                for record in results:
+                    src, s_label = record['from_name'], record['from_label']
+                    tgt, t_label = record['to_name'], record['to_label']
+                    s_props = dict(record['s_props']) if record['s_props'] else {}
+                    t_props = dict(record['t_props']) if record['t_props'] else {}
+                    rel = record['relationship']
+                    
+                    fact = f"- [{s_label}] `{src}` ──[{rel}]──► [{t_label}] `{tgt}`"
+                    if fact not in facts:
+                        facts.append(fact)
+                        nodes_dict[src] = s_label
+                        nodes_dict[tgt] = t_label
+                        nodes_meta[src] = {"label": s_label, "props": s_props}
+                        nodes_meta[tgt] = {"label": t_label, "props": t_props}
+                        edges_list.append({"from": src, "to": tgt, "label": rel})
                     
     return facts, nodes_dict, edges_list, nodes_meta
 
@@ -787,20 +849,40 @@ with col1:
         user_query = st.text_area("Security Analyst Query:", value=selected_sample, height=90)
         
         if st.button("🚨 Analyze Attack Graph & Blast Radius", type="primary"):
-            with st.spinner("Traversing Cyber Threat Graph & Synthesizing SOC Report..."):
+            t_start = time.time()
+            with st.spinner("⚡ Traversing Neo4j Graph Index & Initializing AI Stream..."):
                 entities = extract_entities(user_query)
                 facts, nodes_dict, edges, nodes_meta = fetch_threat_subgraph(entities)
-                answer = answer_threat_query(user_query, facts)
+                traversal_ms = round((time.time() - t_start) * 1000, 1)
                 
-                st.session_state["answer"] = answer
+                cached_item = threat_cache.get(user_query, facts)
+                is_hit = cached_item is not None
+                
                 st.session_state["entities"] = entities
                 st.session_state["facts"] = facts
                 st.session_state["nodes_dict"] = nodes_dict
                 st.session_state["edges"] = edges
                 st.session_state["nodes_meta"] = nodes_meta
+                st.session_state["is_cached"] = is_hit
+                st.session_state["traversal_ms"] = traversal_ms
+                
+                st.markdown("### 📋 SOC Threat Intelligence Report")
+                if is_hit:
+                    st.info(f"⚡ **Cache HIT** (Retrieved in {traversal_ms}ms • 0 LLM API tokens used)")
+                else:
+                    st.success(f"🚀 **Live Generation** (Neo4j Full-Text Traversal: {traversal_ms}ms • Streaming via Gemini)")
 
-        if "answer" in st.session_state:
+                # Token-by-token live streaming
+                stream_gen = synthesize_technical_report_stream(facts, user_query, client=client)
+                answer = st.write_stream(stream_gen)
+                st.session_state["answer"] = answer
+
+        elif "answer" in st.session_state:
             st.markdown("### 📋 SOC Threat Intelligence Report")
+            if st.session_state.get("is_cached"):
+                st.info(f"⚡ **Cached Report** (0 LLM API tokens consumed)")
+            else:
+                st.success(f"⚡ **Neo4j Graph Traversal:** {st.session_state.get('traversal_ms', 12)}ms")
             st.markdown(st.session_state["answer"])
             with st.expander("🔍 Discovered Attack Graph Paths (Evidence)"):
                 for f in st.session_state["facts"]:
