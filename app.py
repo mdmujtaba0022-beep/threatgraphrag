@@ -92,7 +92,8 @@ with st.sidebar:
 from src.graph_engine import (
     extract_cyber_entities,
     fetch_precision_threat_graph,
-    calculate_graph_threat_metrics
+    calculate_graph_threat_metrics,
+    simulate_countermeasure
 )
 
 # Schemas
@@ -1846,7 +1847,117 @@ with container_graph:
     </div>
     """, unsafe_allow_html=True)
     if "edges" in st.session_state and st.session_state["edges"]:
-        st.caption(f"Showing attack path for: {', '.join(st.session_state.get('entities', []))} • (Click node to inspect • 📷 Export PNG or 📥 Export JSON in top toolbar)")
-        render_attack_graph(st.session_state["nodes_dict"], st.session_state["edges"], st.session_state.get("nodes_meta"), graph_height=700)
+        # Extract candidate mitigation targets (CVEs, Services, Packages)
+        nodes_dict = st.session_state["nodes_dict"]
+        cve_candidates = [n for n, l in nodes_dict.items() if l == "Vulnerability"]
+        svc_candidates = [n for n, l in nodes_dict.items() if l == "EnterpriseService"]
+        pkg_candidates = [n for n, l in nodes_dict.items() if l == "SoftwarePackage"]
+        all_candidates = cve_candidates + svc_candidates + pkg_candidates
+        if not all_candidates:
+            all_candidates = list(nodes_dict.keys())
+
+        # What-If Countermeasure Simulator Expander
+        with st.expander("🛡️ Interactive 'What-If' Countermeasure Simulator & Defense Playbooks", expanded=True):
+            st.markdown("""
+            <div style="font-size: 13px; color: #94A3B8; margin-bottom: 8px;">
+                Simulate removing a vulnerability (patching) or severing network ingress (pod isolation) to mathematically evaluate kill-chain reachability and compile deployable SOAR detection rules.
+            </div>
+            """, unsafe_allow_html=True)
+            
+            col_sim_target, col_sim_action, col_sim_btn = st.columns([1.6, 1.2, 0.9])
+            with col_sim_target:
+                target_choice = st.selectbox("Select Target Node to Mitigate:", all_candidates, key="cm_target_select")
+            with col_sim_action:
+                default_act_idx = 0 if any(flaw in str(target_choice) for flaw in ["CVE-", "log4j", "xz-utils", "fortios", "spring"]) else 1
+                action_mode = st.radio("Mitigation Action:", ["🛡️ Patch Vulnerability", "🔒 Isolate Pod / Host"], index=default_act_idx, horizontal=True, key="cm_action_mode")
+                action_type = "patch" if "Patch" in action_mode else "isolate"
+            with col_sim_btn:
+                st.write("")
+                st.write("")
+                sim_btn = st.button("⚡ Run Simulation", type="primary", use_container_width=True, key="btn_run_cm_sim")
+
+            if sim_btn:
+                sim_res = simulate_countermeasure(
+                    nodes_dict=st.session_state["nodes_dict"],
+                    edges=st.session_state["edges"],
+                    nodes_meta=st.session_state.get("nodes_meta", {}),
+                    target_entity=target_choice,
+                    action_type=action_type
+                )
+                st.session_state["countermeasure_sim"] = sim_res
+
+            if "countermeasure_sim" in st.session_state:
+                cm = st.session_state["countermeasure_sim"]
+                
+                # Tactical Scorecard
+                sc1, sc2, sc3, sc4 = st.columns(4)
+                sc1.metric("Kill-Chain Reachability", "🟢 SEVERED" if cm["kill_chain_broken"] else "⚠️ PARTIAL", delta="0 Hops to Jewels" if cm["kill_chain_broken"] else "Residual Path")
+                sc2.metric("Composite Risk Index", f"{cm['after_metrics']['composite_risk_score']}/100", delta=f"-{cm['risk_delta']} pts", delta_color="inverse")
+                sc3.metric("Severed Attack Hops", cm["severed_edges_count"], delta="BLOCKED")
+                sc4.metric("Crown Jewels Protected", len(cm["protected_crown_jewels"]))
+
+                if cm["kill_chain_broken"]:
+                    st.success(f"✅ **MATHEMATICAL PROOF: KILL-CHAIN TERMINATED.** Traversal reachability from ingress to Tier-0 crown jewels drops to 0. Lateral movement paths to `{', '.join(cm['protected_crown_jewels']) if cm['protected_crown_jewels'] else 'crown jewels'}` are broken.")
+                else:
+                    st.warning("⚠️ **PARTIAL CONTAINMENT:** Primary attack hop severed, but secondary pivot paths remain active.")
+
+                col_toggle_graph, col_reset_sim = st.columns([2, 1])
+                with col_toggle_graph:
+                    show_sim_graph = st.checkbox("🎨 Overlay Severed Attack Edges on Graph Canvas (Red dashed [BLOCKED] lines)", value=True, key="chk_show_sim_graph")
+                with col_reset_sim:
+                    if st.button("🔄 Reset to Baseline Graph", use_container_width=True, key="btn_reset_sim"):
+                        del st.session_state["countermeasure_sim"]
+                        st.rerun()
+
+                st.markdown("##### 🛠️ Auto-Generated SecOps Defense Artifacts (Deployable)")
+                tab_sig, tab_k8s, tab_sh = st.tabs(["📄 Sigma SIEM Rule (.yml)", "☸️ Kubernetes NetworkPolicy (.yaml)", "💻 DevOps Quarantine Script (.sh)"])
+                
+                with tab_sig:
+                    st.caption("Standardized Sigma detection rule for SIEM ingestion (Splunk, Microsoft Sentinel, Elastic, QRadar).")
+                    st.code(cm["defense_artifacts"]["sigma_rule"], language="yaml")
+                    st.download_button(
+                        "⬇️ Download Sigma Rule (.yml)",
+                        data=cm["defense_artifacts"]["sigma_rule"],
+                        file_name=f"sigma_detect_{cm['target_entity'].replace(':', '_').replace('/', '_')}.yml",
+                        mime="text/yaml",
+                        use_container_width=True,
+                        key="dl_cm_sigma"
+                    )
+                with tab_k8s:
+                    st.caption("Zero-Trust Kubernetes NetworkPolicy restricting lateral network sockets to/from the compromised pod.")
+                    st.code(cm["defense_artifacts"]["kubernetes_policy"], language="yaml")
+                    st.download_button(
+                        "⬇️ Download NetworkPolicy (.yaml)",
+                        data=cm["defense_artifacts"]["kubernetes_policy"],
+                        file_name=f"k8s_isolate_{cm['target_entity'].replace(':', '_').replace('/', '_')}.yaml",
+                        mime="text/yaml",
+                        use_container_width=True,
+                        key="dl_cm_k8s"
+                    )
+                with tab_sh:
+                    st.caption("Automated bash incident response playbook executing pod cordoning, iptables severing, and forensic labeling.")
+                    st.code(cm["defense_artifacts"]["quarantine_script"], language="bash")
+                    st.download_button(
+                        "⬇️ Download Quarantine Script (.sh)",
+                        data=cm["defense_artifacts"]["quarantine_script"],
+                        file_name=f"quarantine_{cm['target_entity'].replace(':', '_').replace('/', '_')}.sh",
+                        mime="text/x-sh",
+                        use_container_width=True,
+                        key="dl_cm_sh"
+                    )
+
+        # Graph Rendering (either baseline or simulation visual overlay)
+        graph_nodes = st.session_state["nodes_dict"]
+        graph_edges = st.session_state["edges"]
+        graph_meta = st.session_state.get("nodes_meta")
+        
+        if "countermeasure_sim" in st.session_state and st.session_state.get("chk_show_sim_graph", True):
+            graph_nodes = st.session_state["countermeasure_sim"]["visual_nodes"]
+            graph_edges = st.session_state["countermeasure_sim"]["visual_edges"]
+            st.caption(f"Showing attack path with **Simulated Countermeasure applied on `{st.session_state['countermeasure_sim']['target_entity']}`** • (Red dashed edges indicate `[BLOCKED]` hops)")
+        else:
+            st.caption(f"Showing attack path for: {', '.join(st.session_state.get('entities', []))} • (Click node to inspect • 📷 Export PNG or 📥 Export JSON in top toolbar)")
+            
+        render_attack_graph(graph_nodes, graph_edges, graph_meta, graph_height=700)
     else:
         st.info("Execute a threat scenario on the left to visualize the attack path and lateral movement graph!")

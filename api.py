@@ -20,7 +20,7 @@ from src.repo_evaluator import (
 )
 from src.report_generator import synthesize_technical_report, synthesize_technical_report_stream
 from src.cache_manager import threat_cache
-from src.graph_engine import extract_cyber_entities, fetch_precision_threat_graph
+from src.graph_engine import extract_cyber_entities, fetch_precision_threat_graph, simulate_countermeasure
 
 load_dotenv()
 
@@ -59,6 +59,23 @@ class BlastRadiusResponse(BaseModel):
     vulnerabilities: List[str]
     lateral_movement_paths: List[str]
     severity_level: str
+
+class CountermeasureRequest(BaseModel):
+    target_entity: str = Field(..., example="CVE-2021-44228", description="CVE flaw ID or enterprise service to mitigate")
+    action_type: str = Field("patch", example="patch", description="'patch' to mitigate CVE flaw or 'isolate' to quarantine host/pod")
+
+class CountermeasureResponse(BaseModel):
+    target_entity: str
+    action_type: str
+    kill_chain_broken: bool
+    risk_delta: int
+    before_risk_score: int
+    after_risk_score: int
+    severed_edges_count: int
+    protected_crown_jewels: List[str]
+    sigma_rule: str
+    kubernetes_policy: str
+    quarantine_script: str
 
 # Endpoints
 @app.get("/health", tags=["System"])
@@ -133,6 +150,39 @@ def calculate_blast_radius(target: str = Query(..., description="Service name or
         vulnerabilities=list(cves),
         lateral_movement_paths=paths,
         severity_level="CRITICAL" if any("10.0" in c for c in cves) else "HIGH"
+    )
+
+@app.post("/api/countermeasure/simulate", response_model=CountermeasureResponse, tags=["Active Defense & SOAR"])
+def simulate_defense_countermeasure(request: CountermeasureRequest):
+    """
+    Simulates graph-theoretic countermeasure reachability and blast radius reduction.
+    Evaluates whether patching a vulnerability or isolating a Kubernetes pod breaks the multi-hop kill-chain to crown jewels.
+    Returns quantitative risk deltas, severed paths, and auto-generated Sigma & Kubernetes defense artifacts.
+    """
+    facts, nodes_dict, edges, nodes_meta, metrics = fetch_precision_threat_graph(driver, [request.target_entity])
+    if not nodes_dict:
+        raise HTTPException(status_code=404, detail=f"Target entity '{request.target_entity}' not found in knowledge graph.")
+        
+    sim_res = simulate_countermeasure(
+        nodes_dict=nodes_dict,
+        edges=edges,
+        nodes_meta=nodes_meta,
+        target_entity=request.target_entity,
+        action_type=request.action_type
+    )
+    
+    return CountermeasureResponse(
+        target_entity=sim_res["target_entity"],
+        action_type=sim_res["action_type"],
+        kill_chain_broken=sim_res["kill_chain_broken"],
+        risk_delta=sim_res["risk_delta"],
+        before_risk_score=sim_res["before_metrics"]["composite_risk_score"],
+        after_risk_score=sim_res["after_metrics"]["composite_risk_score"],
+        severed_edges_count=sim_res["severed_edges_count"],
+        protected_crown_jewels=sim_res["protected_crown_jewels"],
+        sigma_rule=sim_res["defense_artifacts"]["sigma_rule"],
+        kubernetes_policy=sim_res["defense_artifacts"]["kubernetes_policy"],
+        quarantine_script=sim_res["defense_artifacts"]["quarantine_script"]
     )
 
 @app.post("/api/threat-query", response_model=QueryResponse, tags=["Threat Intelligence"])
