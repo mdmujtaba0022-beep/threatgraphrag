@@ -1048,26 +1048,64 @@ st.markdown("""
   box-shadow: 0 0 8px rgba(37, 99, 235, 0.6) !important;
 }
 
-[data-testid="stVerticalBlock"]:fullscreen,
-.report-overlay-fullscreen {
-  background: #070B14 !important;
-  color: #E2E8F0 !important;
-  padding: 36px 54px !important;
-  overflow-y: auto !important;
-  box-sizing: border-box !important;
-  width: 100vw !important;
-  height: 100vh !important;
+.report-fullscreen-active {
   position: fixed !important;
   top: 0 !important;
   left: 0 !important;
-  z-index: 999999 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  max-width: 100vw !important;
+  max-height: 100vh !important;
+  z-index: 2147483647 !important;
+  background: #070B14 !important;
+  color: #E2E8F0 !important;
+  padding: 32px 50px !important;
+  overflow-y: auto !important;
+  box-sizing: border-box !important;
+  box-shadow: 0 0 80px rgba(0, 0, 0, 0.95) !important;
 }
 
+[data-testid="stVerticalBlock"]:fullscreen,
+[data-testid="stColumn"]:fullscreen {
+  width: 100vw !important;
+  height: 100vh !important;
+  background: #070B14 !important;
+  color: #E2E8F0 !important;
+  padding: 32px 50px !important;
+  overflow-y: auto !important;
+  box-sizing: border-box !important;
+}
+
+.report-fullscreen-active .stMarkdown,
 [data-testid="stVerticalBlock"]:fullscreen .stMarkdown,
-.report-overlay-fullscreen .stMarkdown {
-  max-width: 1100px !important;
+[data-testid="stColumn"]:fullscreen .stMarkdown {
+  max-width: 1180px !important;
   margin: 0 auto !important;
   line-height: 1.65 !important;
+}
+
+.report-fullscreen-active [data-testid="element-container"],
+[data-testid="stVerticalBlock"]:fullscreen [data-testid="element-container"],
+[data-testid="stColumn"]:fullscreen [data-testid="element-container"] {
+  max-width: 1180px !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+
+.report-fullscreen-active .report-fullscreen-icon {
+  background: #DC2626 !important;
+  border-color: #EF4444 !important;
+  color: #FFFFFF !important;
+  font-weight: 700 !important;
+  box-shadow: 0 0 10px rgba(220, 38, 38, 0.6) !important;
+}
+
+.report-fullscreen-active .report-fullscreen-icon:hover {
+  background: #B91C1C !important;
+  border-color: #F87171 !important;
+  transform: scale(1.05) !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -1214,63 +1252,156 @@ components.html("""
     observer.observe(window.parent.document.body, { childList: true, subtree: true });
   } catch(e) {}
 
-  // Report Fullscreen Toggle Function
-  window.parent.toggleReportFS = function() {
+  // --- Enhanced Report Fullscreen Engine ---
+  function getReportTarget(btn) {
+    const pDoc = window.parent.document;
+    if (!pDoc) return null;
+    
+    const kind = btn ? btn.getAttribute('data-report-fs') : null;
+    
+    if (kind === 'window') {
+      const hBlock = pDoc.querySelector('[data-testid="stHorizontalBlock"]');
+      if (hBlock) {
+        const cols = hBlock.querySelectorAll(':scope > [data-testid="stColumn"]');
+        if (cols.length >= 1) return cols[0];
+      }
+    }
+    
+    const marker = pDoc.getElementById('threat-report-marker');
+    if (marker) {
+      const container = marker.closest('[data-testid="stVerticalBlock"]');
+      if (container) return container;
+    }
+    
+    if (btn) {
+      const vBlock = btn.closest('[data-testid="stVerticalBlock"]');
+      if (vBlock) return vBlock;
+    }
+    
+    const hBlock = pDoc.querySelector('[data-testid="stHorizontalBlock"]');
+    if (hBlock) {
+      const cols = hBlock.querySelectorAll(':scope > [data-testid="stColumn"]');
+      if (cols.length >= 1) return cols[0];
+    }
+    return null;
+  }
+
+  function updateAllReportButtons(isFS) {
     try {
       const pDoc = window.parent.document;
-      const marker = pDoc.getElementById('threat-report-marker');
-      if (!marker) return;
+      if (!pDoc) return;
+      const btns = pDoc.querySelectorAll('.report-fullscreen-icon, [data-report-fs], #report-fs-btn');
+      btns.forEach(btn => {
+        const icon = btn.querySelector('.fs-icon') || btn.querySelector('#report-fs-icon');
+        const text = btn.querySelector('.fs-text') || btn.querySelector('#report-fs-text');
+        if (icon) icon.innerText = isFS ? '✖' : '⛶';
+        if (text) text.innerText = isFS ? 'Exit Fullscreen' : 'Fullscreen';
+        btn.title = isFS ? 'Exit Fullscreen Reading View (Esc)' : 'Toggle Fullscreen Reading View (⛶)';
+      });
+    } catch(e) {}
+  }
+
+  window.parent.toggleReportFullscreen = function(btn) {
+    try {
+      const pDoc = window.parent.document;
+      if (!pDoc) return;
       
-      const target = marker.closest('[data-testid="stVerticalBlock"]') || marker.parentElement;
-      if (!target) return;
+      const activeEl = pDoc.querySelector('.report-fullscreen-active');
+      const isAlreadyFS = !!activeEl || !!pDoc.fullscreenElement || pDoc.body.classList.contains('report-fs-active');
       
-      if (!pDoc.fullscreenElement && !target.classList.contains('report-overlay-fullscreen')) {
-        if (target.requestFullscreen) {
-          target.requestFullscreen().catch(() => {
-            target.classList.add('report-overlay-fullscreen');
-            updateReportFSBtn(true);
-          });
-        } else {
-          target.classList.add('report-overlay-fullscreen');
-          updateReportFSBtn(true);
-        }
+      if (isAlreadyFS) {
+        window.parent.exitReportFullscreen();
       } else {
-        if (pDoc.fullscreenElement) {
-          pDoc.exitFullscreen();
-        }
-        target.classList.remove('report-overlay-fullscreen');
-        updateReportFSBtn(false);
+        const target = getReportTarget(btn);
+        if (!target) return;
+        
+        target.classList.add('report-fullscreen-active');
+        pDoc.body.classList.add('report-fs-active');
+        pDoc.body.style.overflow = 'hidden';
+        updateAllReportButtons(true);
+        
+        try {
+          if (!pDoc.fullscreenElement && target.requestFullscreen) {
+            target.requestFullscreen().catch(() => {});
+          }
+        } catch(e) {}
       }
     } catch(err) {
       console.error('Report Fullscreen error:', err);
     }
   };
 
-  function updateReportFSBtn(isFS) {
+  window.parent.exitReportFullscreen = function() {
     try {
       const pDoc = window.parent.document;
-      const btns = pDoc.querySelectorAll('#report-fs-btn');
-      btns.forEach(btn => {
-        const icon = btn.querySelector('#report-fs-icon');
-        const text = btn.querySelector('#report-fs-text');
-        if (icon) icon.innerText = isFS ? '✖' : '⛶';
-        if (text) text.innerText = isFS ? 'Exit Fullscreen' : 'Fullscreen';
-      });
+      if (!pDoc) return;
+      
+      const targets = pDoc.querySelectorAll('.report-fullscreen-active');
+      targets.forEach(t => t.classList.remove('report-fullscreen-active'));
+      pDoc.body.classList.remove('report-fs-active');
+      pDoc.body.style.overflow = '';
+      updateAllReportButtons(false);
+      
+      try {
+        if (pDoc.fullscreenElement && pDoc.exitFullscreen) {
+          pDoc.exitFullscreen().catch(() => {});
+        }
+      } catch(e) {}
     } catch(e) {}
-  }
+  };
 
+  // Backwards compatibility
+  window.parent.toggleReportFS = function() {
+    window.parent.toggleReportFullscreen(null);
+  };
+
+  // Attach global parent document event listeners once
   try {
     const pDoc = window.parent.document;
-    pDoc.addEventListener('fullscreenchange', function() {
-      const isFS = !!pDoc.fullscreenElement;
-      updateReportFSBtn(isFS);
-    });
+    if (pDoc && !window.parent.__threat_report_fs_listener_attached) {
+      window.parent.__threat_report_fs_listener_attached = true;
+      
+      pDoc.addEventListener('click', function(e) {
+        const btn = e.target.closest('.report-fullscreen-icon, [data-report-fs], #report-fs-btn');
+        if (btn) {
+          e.preventDefault();
+          e.stopPropagation();
+          window.parent.toggleReportFullscreen(btn);
+        }
+      }, true);
+      
+      pDoc.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' || e.key === 'Esc' || e.keyCode === 27) {
+          if (pDoc.body.classList.contains('report-fs-active') || pDoc.querySelector('.report-fullscreen-active')) {
+            window.parent.exitReportFullscreen();
+          }
+        }
+      }, true);
+      
+      pDoc.addEventListener('fullscreenchange', function() {
+        if (!pDoc.fullscreenElement) {
+          const targets = pDoc.querySelectorAll('.report-fullscreen-active');
+          targets.forEach(t => t.classList.remove('report-fullscreen-active'));
+          pDoc.body.classList.remove('report-fs-active');
+          pDoc.body.style.overflow = '';
+          updateAllReportButtons(false);
+        }
+      });
+    }
   } catch(e) {}
 })();
 </script>
 """, height=0)
 
 with container_report:
+    st.markdown("""
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; padding-bottom:4px;">
+      <span style="font-size:1.15rem; font-weight:700; color:#F8FAFC;">📋 Threat Investigation & Advisory Report</span>
+      <button class="report-fullscreen-icon" data-report-fs="window" title="Toggle Fullscreen Reading View (⛶)">
+        <span class="fs-icon">⛶</span> <span class="fs-text">Fullscreen</span>
+      </button>
+    </div>
+    """, unsafe_allow_html=True)
     tab_query, tab_sbom, tab_benchmark = st.tabs(["🕵️ Threat Query", "📦 GitHub & SBOM Supply Chain", "📊 Empirical Benchmark"])
     
     with tab_query:
@@ -1306,10 +1437,10 @@ with container_report:
                 rep_container = st.container()
                 with rep_container:
                     st.markdown("""
-                    <div id="threat-report-marker" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                      <span style="font-size:1.15rem; font-weight:700; color:#F8FAFC;">📋 SOC Threat Intelligence Report</span>
-                      <button id="report-fs-btn" class="report-fullscreen-icon" onclick="toggleReportFS()" title="Toggle Fullscreen Reading View (⛶)">
-                        <span id="report-fs-icon">⛶</span> <span id="report-fs-text">Fullscreen</span>
+                    <div id="threat-report-marker" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; border-bottom:1px solid #1E293B; padding-bottom:8px;">
+                      <span style="font-size:1.15rem; font-weight:700; color:#38BDF8;">📋 SOC Threat Intelligence Report</span>
+                      <button id="report-fs-btn" class="report-fullscreen-icon" data-report-fs="card" title="Toggle Fullscreen Reading View (⛶)">
+                        <span class="fs-icon" id="report-fs-icon">⛶</span> <span class="fs-text" id="report-fs-text">Fullscreen</span>
                       </button>
                     </div>
                     """, unsafe_allow_html=True)
@@ -1327,10 +1458,10 @@ with container_report:
             rep_container = st.container()
             with rep_container:
                 st.markdown("""
-                <div id="threat-report-marker" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                  <span style="font-size:1.15rem; font-weight:700; color:#F8FAFC;">📋 SOC Threat Intelligence Report</span>
-                  <button id="report-fs-btn" class="report-fullscreen-icon" onclick="toggleReportFS()" title="Toggle Fullscreen Reading View (⛶)">
-                    <span id="report-fs-icon">⛶</span> <span id="report-fs-text">Fullscreen</span>
+                <div id="threat-report-marker" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; border-bottom:1px solid #1E293B; padding-bottom:8px;">
+                  <span style="font-size:1.15rem; font-weight:700; color:#38BDF8;">📋 SOC Threat Intelligence Report</span>
+                  <button id="report-fs-btn" class="report-fullscreen-icon" data-report-fs="card" title="Toggle Fullscreen Reading View (⛶)">
+                    <span class="fs-icon" id="report-fs-icon">⛶</span> <span class="fs-text" id="report-fs-text">Fullscreen</span>
                   </button>
                 </div>
                 """, unsafe_allow_html=True)
@@ -1458,9 +1589,10 @@ with container_report:
                 if "repo_ai_report" in st.session_state and st.session_state["repo_ai_report"]:
                     with st.expander("📋 SOC Threat Intelligence & Remediation Roadmap (AI-Generated)", expanded=True):
                         st.markdown("""
-                        <div id="threat-report-marker" style="display:flex; justify-content:flex-end; margin-bottom:8px;">
-                          <button id="report-fs-btn" class="report-fullscreen-icon" onclick="toggleReportFS()" title="Toggle Fullscreen Reading View (⛶)">
-                            <span id="report-fs-icon">⛶</span> <span id="report-fs-text">Fullscreen</span>
+                        <div id="threat-report-marker" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; border-bottom:1px solid #1E293B; padding-bottom:8px;">
+                          <span style="font-size:1.05rem; font-weight:700; color:#38BDF8;">📋 SOC Threat Intelligence & Remediation Roadmap</span>
+                          <button id="report-fs-btn" class="report-fullscreen-icon" data-report-fs="card" title="Toggle Fullscreen Reading View (⛶)">
+                            <span class="fs-icon" id="report-fs-icon">⛶</span> <span class="fs-text" id="report-fs-text">Fullscreen</span>
                           </button>
                         </div>
                         """, unsafe_allow_html=True)
