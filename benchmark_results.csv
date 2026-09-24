@@ -1,0 +1,6 @@
+Test_ID,Vector_Recall,Graph_Recall,Vector_Faithfulness,Graph_Faithfulness,Vector_Precision,Graph_Precision
+TC-01,0.4,0.4,0.6,0.6,0.5,0.5
+TC-02,0.0,0.4,1.0,0.6,0.0,0.5
+TC-03,0.4,0.4,0.6,0.6,0.5,0.5
+TC-04,0.4,0.4,0.6,0.6,0.5,0.5
+TC-05,0.0,0.4,1.0,0.6,1.0,0.5

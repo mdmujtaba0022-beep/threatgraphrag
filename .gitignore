@@ -1,0 +1,9 @@
+.env
+.env.txt
+venv/
+__pycache__/
+*.pyc
+.streamlit/
+test_connections.py
+query_graphrag.py
+setup_env.py
