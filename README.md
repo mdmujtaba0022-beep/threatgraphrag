@@ -110,10 +110,32 @@ python -m uvicorn api:app --reload --port 8000
 Visit **`http://localhost:8000/docs`** for interactive Swagger API documentation.
 
 #### Key API Endpoints:
+* `POST /api/scan-github-repo`: Scans external GitHub repositories (or raw manifests) for zero-days, APT campaigns, and lateral movement blast radius.
+* `GET /api/github-presets`: Retrieves preconfigured vulnerable & secure repository scenarios for quick demonstration.
+* `POST /api/scan-sbom`: Audits CycloneDX / enterprise SBOM dependencies against the CTI graph.
 * `POST /api/threat-query`: Multi-hop attack path reasoning and executive SOC advisory.
 * `GET /api/blast-radius?target=Customer-Auth-Service`: Calculates lateral movement risk and compromised microservices.
 * `GET /api/graph-summary`: Returns tracked threat actors, critical CVEs, and enterprise services.
 * `GET /health`: Health-check monitoring database and model connectivity.
+
+### 🌐 Evaluating an External GitHub Repository
+
+#### Option A: Via Streamlit UI
+1. Navigate to the **📦 GitHub & SBOM Supply Chain** tab at `http://localhost:8501`.
+2. Select **🐙 Live GitHub Repository**.
+3. Choose a preset scenario (e.g. `apache/logging-log4j2`, `jiaT75/xz`, `spring-projects/spring-framework`, or `psf/requests`) or enter any custom repository URL (`https://github.com/owner/repo`).
+4. Click **🚀 Audit GitHub Repository Security**.
+5. ThreatGraphRAG will automatically fetch the dependency manifest (`pom.xml`, `requirements.txt`, `package.json`, `pyproject.toml`, or `go.mod`), cross-reference dependencies against the Neo4j Cyber Threat Knowledge Graph, simulate enterprise service blast radius, synthesize an AI SOC report with Gemini, and render the complete attack graph in 2D Vis.js.
+
+#### Option B: Via Headless FastAPI REST Endpoint
+```bash
+curl -X POST "http://127.0.0.1:8000/api/scan-github-repo" \
+     -H "Content-Type: application/json" \
+     -d '{
+       "repo_url": "https://github.com/apache/logging-log4j2",
+       "generate_ai_report": true
+     }'
+```
 
 ---
 

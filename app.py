@@ -10,6 +10,15 @@ from google.genai import types
 from pydantic import BaseModel, Field
 from typing import List
 
+from src.repo_evaluator import (
+    parse_github_url,
+    fetch_repo_manifest,
+    parse_generic_manifest,
+    evaluate_repo_dependencies,
+    generate_ai_repo_audit_report,
+    PRESET_REPOSITORIES
+)
+
 # Page config
 st.set_page_config(page_title="ThreatGraphRAG | Cyber Threat Intelligence", layout="wide", page_icon="🛡️")
 
@@ -18,10 +27,10 @@ st.caption("Automated Multi-Hop Attack Graph Reasoning & Supply Chain Blast Radi
 
 # Load credentials
 load_dotenv()
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "your_gemini_api_key_here")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 NEO4J_URI = os.getenv("NEO4J_URI", "neo4j+ssc://e6c68873.databases.neo4j.io")
-NEO4J_USERNAME = os.getenv("NEO4J_USERNAME", "e6c68873")
-NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "your_neo4j_password_here")
+NEO4J_USERNAME = os.getenv("NEO4J_USERNAME", "neo4j")
+NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD")
 
 @st.cache_resource
 def get_clients():
@@ -143,6 +152,7 @@ USER QUESTION:
 def render_attack_graph(nodes_dict, edges):
     # Color coding by entity category
     color_map = {
+        "GitHubRepo": "#9D4EDD",        # Purple
         "ThreatActor": "#E63946",       # Red
         "AttackTechnique": "#F4A261",   # Orange
         "Vulnerability": "#D62828",     # Crimson
@@ -154,13 +164,15 @@ def render_attack_graph(nodes_dict, edges):
     vis_nodes = []
     for name, label in nodes_dict.items():
         color = color_map.get(label, "#A8DADC")
+        shape = "hexagon" if label == "GitHubRepo" else ("box" if label == "EnterpriseService" else "dot")
+        size = 26 if label in ["GitHubRepo", "ThreatActor", "Vulnerability"] else 16
         vis_nodes.append({
             "id": name,
             "label": f"[{label}]\n{name}",
             "color": color,
             "font": {"color": "#FFFFFF", "size": 12},
-            "shape": "box" if label == "EnterpriseService" else "dot",
-            "size": 22 if label in ["ThreatActor", "Vulnerability"] else 16
+            "shape": shape,
+            "size": size
         })
         
     vis_edges = [{"from": e["from"], "to": e["to"], "label": e["label"], "arrows": "to", "color": {"color": "#888888"}} for e in edges]
@@ -202,7 +214,7 @@ def render_attack_graph(nodes_dict, edges):
 col1, col2 = st.columns([1, 1])
 
 with col1:
-    tab_query, tab_benchmark = st.tabs(["🕵️ Threat Intelligence Query", "📊 Empirical Benchmark (RAG vs GraphRAG)"])
+    tab_query, tab_sbom, tab_benchmark = st.tabs(["🕵️ Threat Query", "📦 GitHub & SBOM Supply Chain", "📊 Empirical Benchmark"])
     
     with tab_query:
         sample_queries = [
@@ -232,6 +244,187 @@ with col1:
             with st.expander("🔍 Discovered Attack Graph Paths (Evidence)"):
                 for f in st.session_state["facts"]:
                     st.write(f)
+
+    with tab_sbom:
+        st.markdown("#### 📦 Software Supply Chain & Vulnerability Auditor")
+        st.caption("Cross-references dependency manifests against the ThreatGraphRAG Knowledge Graph to detect zero-days, active APT campaigns, and lateral movement blast radius.")
+        
+        audit_mode = st.radio(
+            "Select Supply Chain Audit Target:",
+            ["🐙 Live GitHub Repository", "📁 Enterprise Cloud Platform SBOM"],
+            horizontal=True
+        )
+        
+        if audit_mode == "🐙 Live GitHub Repository":
+            st.markdown("##### 🐙 Audit External Git Repository")
+            preset_options = list(PRESET_REPOSITORIES.keys()) + ["Custom Repository URL / Manual Input"]
+            selected_repo_preset = st.selectbox("Choose a Repository Scenario or enter Custom:", preset_options)
+            
+            if selected_repo_preset == "Custom Repository URL / Manual Input":
+                repo_url = st.text_input("GitHub Repository URL or owner/repo:", value="https://github.com/apache/logging-log4j2", placeholder="https://github.com/owner/repo")
+                col_branch, col_man = st.columns(2)
+                with col_branch:
+                    target_branch = st.text_input("Branch / Tag (optional):", value="", placeholder="main (default)")
+                with col_man:
+                    manifest_choice = st.selectbox("Manifest Detection:", ["Auto-Detect", "requirements.txt", "package.json", "pom.xml", "pyproject.toml", "go.mod", "Direct Manifest Paste"])
+                
+                custom_content = None
+                if manifest_choice == "Direct Manifest Paste":
+                    custom_content = st.text_area("Paste Manifest Contents (e.g. requirements.txt, pom.xml, or package.json):", height=120)
+                selected_manifest_type = None if manifest_choice in ["Auto-Detect", "Direct Manifest Paste"] else manifest_choice
+            else:
+                preset_data = PRESET_REPOSITORIES[selected_repo_preset]
+                st.info(f"ℹ️ **Target:** `{preset_data['owner']}/{preset_data['repo']}` — {preset_data['description']}")
+                repo_url = preset_data["url"]
+                target_branch = None
+                selected_manifest_type = preset_data["manifest_type"]
+                custom_content = preset_data["simulated_manifest"]
+                
+            if st.button("🚀 Audit GitHub Repository Security", type="primary"):
+                with st.spinner(f"Auditing dependencies for {repo_url} against Cyber Threat Graph..."):
+                    try:
+                        parsed = parse_github_url(repo_url)
+                        owner = parsed["owner"]
+                        repo = parsed["repo"]
+                        repo_id = f"{owner}/{repo}"
+                        branch = target_branch if target_branch else (parsed.get("branch") or "main")
+                        
+                        manifest_content = custom_content
+                        manifest_filename = selected_manifest_type or "requirements.txt"
+                        
+                        if not manifest_content:
+                            manifest_content, manifest_filename, branch = fetch_repo_manifest(
+                                owner, repo, branch=branch, specified_file=selected_manifest_type
+                            )
+                            
+                        packages = parse_generic_manifest(manifest_filename, manifest_content)
+                        
+                        if not packages:
+                            st.warning(f"No parseable dependencies found in {manifest_filename}.")
+                        else:
+                            eval_res = evaluate_repo_dependencies(driver, packages, repo_id)
+                            
+                            st.session_state["nodes_dict"] = eval_res["vis_graph"]["nodes"]
+                            st.session_state["edges"] = eval_res["vis_graph"]["edges"]
+                            st.session_state["entities"] = list(eval_res["vis_graph"]["nodes"].keys())
+                            
+                            ai_soc_report = generate_ai_repo_audit_report(repo_id, eval_res, gemini_api_key=GEMINI_API_KEY)
+                            st.session_state["repo_ai_report"] = ai_soc_report
+                            st.session_state["repo_eval_res"] = eval_res
+                            
+                    except Exception as e:
+                        st.error(f"Audit failed: {e}")
+                        
+            if "repo_eval_res" in st.session_state:
+                res = st.session_state["repo_eval_res"]
+                posture = res["security_posture"]
+                if "CRITICAL" in posture:
+                    st.error(f"🚨 **ALERT: CRITICAL SUPPLY CHAIN VULNERABILITIES IDENTIFIED IN {res['repository']}!**")
+                elif "HIGH" in posture or "MEDIUM" in posture:
+                    st.warning(f"⚠️ **WARNING: ELEVATED RISK IN {res['repository']}!**")
+                else:
+                    st.success(f"✅ **SECURE: ZERO KNOWN ZERO-DAYS DETECTED IN {res['repository']}.**")
+                    
+                col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+                col_m1.metric("Packages Audited", res["total_dependencies_scanned"])
+                col_m2.metric("Critical CVEs", res["critical_vulnerabilities_detected"], delta="CRITICAL" if res["critical_vulnerabilities_detected"] > 0 else "0", delta_color="inverse")
+                col_m3.metric("Targeting Adversaries", len(res["active_threat_actors"]))
+                col_m4.metric("Supply Chain Risk", f"{res['composite_risk_score']}/100")
+                
+                if res["findings"]:
+                    st.markdown("##### 🔍 Identified Vulnerability Findings & Prescribed Patches")
+                    import pandas as pd
+                    df_findings = pd.DataFrame(res["findings"])[[
+                        "detected_package", "cve", "cvss_score", "vulnerability_type",
+                        "exploited_by_adversary", "prescribed_remediation", "simulated_service_blast_radius"
+                    ]]
+                    df_findings.columns = ["Package", "CVE", "CVSS", "Flaw Type", "Adversary", "Prescribed Patch", "Service at Risk"]
+                    st.dataframe(df_findings, use_container_width=True)
+                    
+                    if res["impacted_enterprise_services"]:
+                        st.markdown(f"**💥 Simulated Downstream Blast Radius:** `{', '.join(res['impacted_enterprise_services'])}` ➔ Can pivot to `{', '.join(res['downstream_blast_radius_targets'])}`")
+                        
+                if "repo_ai_report" in st.session_state and st.session_state["repo_ai_report"]:
+                    with st.expander("📋 SOC Threat Intelligence & Remediation Roadmap (AI-Generated)", expanded=True):
+                        st.markdown(st.session_state["repo_ai_report"])
+                        
+                st.success("✅ Interactive Attack Graph on the right updated with the repository supply chain topology!")
+
+        else:
+            st.markdown("##### 📁 Enterprise Cloud Platform SBOM (CycloneDX)")
+            st.caption("Cross-references enterprise dependency manifests against the ThreatGraphRAG Knowledge Graph to detect zero-days and threat actors.")
+            
+            if st.button("🛡️ Audit Enterprise Platform Dependencies", type="primary"):
+                with st.spinner("Auditing SBOM against ThreatGraphRAG Knowledge Base..."):
+                    import json
+                    sbom_path = "data/sample_enterprise_sbom.json"
+                    if os.path.exists(sbom_path):
+                        with open(sbom_path) as f:
+                            sbom_data = json.load(f)
+                            
+                        findings = []
+                        infected_nodes = {}
+                        infected_edges = []
+                        all_cves = set()
+                        all_actors = set()
+                        
+                        with driver.session() as session:
+                            for svc in sbom_data["services"]:
+                                s_name = svc["name"]
+                                infected_nodes[s_name] = "EnterpriseService"
+                                for dep in svc["dependencies"]:
+                                    dep_search = dep.split(":")[1] if ":" in dep else dep
+                                    cypher = """
+                                    MATCH (p:SoftwarePackage)
+                                    WHERE toLower(p.name) CONTAINS toLower($dep_name)
+                                    MATCH (v:Vulnerability)-[:EXPLOITS_FLAW_IN]->(p)
+                                    OPTIONAL MATCH (tech:AttackTechnique)-[:TARGETS_VULNERABILITY]->(v)
+                                    OPTIONAL MATCH (actor:ThreatActor)-[:LEVERAGES]->(tech)
+                                    OPTIONAL MATCH (v)-[:MITIGATED_BY]->(patch:RemediationPatch)
+                                    RETURN 
+                                        p.name AS pkg, v.name AS cve, v.cvss AS cvss, v.type AS vuln_type,
+                                        actor.name AS actor, patch.name AS patch
+                                    """
+                                    for r in session.run(cypher, dep_name=dep_search):
+                                        if r["cve"]:
+                                            all_cves.add(r["cve"])
+                                            if r["actor"]: all_actors.add(r["actor"])
+                                            findings.append({
+                                                "Service": s_name,
+                                                "Vulnerable Package": dep,
+                                                "CVE": r["cve"],
+                                                "CVSS": r["cvss"],
+                                                "Threat Actor": r["actor"] or "Undisclosed",
+                                                "Remediation Patch": r["patch"] or "Vendor Update"
+                                            })
+                                            pkg_name = r["pkg"]
+                                            cve_name = r["cve"]
+                                            infected_nodes[pkg_name] = "SoftwarePackage"
+                                            infected_nodes[cve_name] = "Vulnerability"
+                                            infected_edges.append({"from": s_name, "to": pkg_name, "label": "DEPENDS_ON"})
+                                            infected_edges.append({"from": cve_name, "to": pkg_name, "label": "EXPLOITS"})
+                                            if r["actor"]:
+                                                act_name = r["actor"]
+                                                infected_nodes[act_name] = "ThreatActor"
+                                                infected_edges.append({"from": act_name, "to": cve_name, "label": "TARGETS"})
+
+                        st.session_state["nodes_dict"] = infected_nodes
+                        st.session_state["edges"] = infected_edges
+                        st.session_state["entities"] = list(infected_nodes.keys())
+                        
+                        st.error(f"🚨 ALERT: {len(all_cves)} Critical Zero-Day Vulnerabilities Detected in Deployment!")
+                        
+                        sb_col1, sb_col2, sb_col3 = st.columns(3)
+                        sb_col1.metric("Services Audited", len(sbom_data["services"]))
+                        sb_col2.metric("Critical CVEs", len(all_cves), delta="CRITICAL", delta_color="inverse")
+                        sb_col3.metric("Targeting Adversaries", ", ".join(all_actors) if all_actors else "None")
+                        
+                        st.markdown("##### 🔍 Identified Vulnerable Dependencies & Prescribed Fixes")
+                        import pandas as pd
+                        st.dataframe(pd.DataFrame(findings), use_container_width=True)
+                        st.success("✅ Interactive Attack Graph updated on the right to visualize the infected supply chain paths!")
+                    else:
+                        st.error("Sample SBOM file not found at data/sample_enterprise_sbom.json")
 
     with tab_benchmark:
         st.markdown("#### 🔬 Empirical Evaluation: Naive Vector RAG vs. ThreatGraphRAG")
@@ -267,7 +460,7 @@ with col1:
 with col2:
     st.subheader("🕸️ Interactive Attack Graph & Blast Radius")
     st.markdown("""
-    **Legend:** 🔴 Threat Actor | 🟠 MITRE Technique | 🚨 Vulnerability (CVE) | 🟡 Vulnerable Library | 🔵 Enterprise Service | 🟢 Remediation Patch
+    **Legend:** 🟣 GitHub Repo | 🔴 Threat Actor | 🟠 MITRE Technique | 🚨 Vulnerability (CVE) | 🟡 Vulnerable Library | 🔵 Enterprise Service | 🟢 Remediation Patch
     """)
     if "edges" in st.session_state and st.session_state["edges"]:
         st.caption(f"Showing attack path for: {', '.join(st.session_state['entities'])} (Click & Drag nodes)")

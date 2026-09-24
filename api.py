@@ -8,6 +8,15 @@ from neo4j import GraphDatabase
 from google import genai
 from google.genai import types
 
+from src.repo_evaluator import (
+    parse_github_url,
+    fetch_repo_manifest,
+    parse_generic_manifest,
+    evaluate_repo_dependencies,
+    generate_ai_repo_audit_report,
+    PRESET_REPOSITORIES
+)
+
 load_dotenv()
 
 # App initialization
@@ -18,10 +27,10 @@ app = FastAPI(
 )
 
 # Credentials
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "your_gemini_api_key_here")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 NEO4J_URI = os.getenv("NEO4J_URI", "neo4j+ssc://e6c68873.databases.neo4j.io")
-NEO4J_USERNAME = os.getenv("NEO4J_USERNAME", "e6c68873")
-NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "your_neo4j_password_here")
+NEO4J_USERNAME = os.getenv("NEO4J_USERNAME", "neo4j")
+NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD")
 
 client = genai.Client(api_key=GEMINI_API_KEY)
 driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USERNAME, NEO4J_PASSWORD))
@@ -178,6 +187,142 @@ Output a clean, executive SOC advisory with Threat Summary, Multi-Hop Attack Pat
         threat_intelligence_report=report,
         execution_time_seconds=round(time.time() - t0, 3)
     )
+
+class SBOMServiceInput(BaseModel):
+    name: str
+    dependencies: List[str]
+
+class SBOMScanRequest(BaseModel):
+    application_name: str = "Enterprise Cloud Platform"
+    services: List[SBOMServiceInput]
+
+@app.post("/api/scan-sbom", tags=["Supply Chain Security"])
+def scan_sbom(sbom: SBOMScanRequest):
+    """Scans software dependencies against the ThreatGraphRAG knowledge base to flag critical zero-days and threat actors."""
+    findings = []
+    all_vulnerabilities = set()
+    all_threat_actors = set()
+    
+    with driver.session() as session:
+        for svc in sbom.services:
+            for dep in svc.dependencies:
+                cypher = """
+                MATCH (p:SoftwarePackage)
+                WHERE toLower(p.name) CONTAINS toLower($dep_name) OR toLower($dep_name) CONTAINS toLower(p.name)
+                MATCH (v:Vulnerability)-[:EXPLOITS_FLAW_IN]->(p)
+                OPTIONAL MATCH (tech:AttackTechnique)-[:TARGETS_VULNERABILITY]->(v)
+                OPTIONAL MATCH (actor:ThreatActor)-[:LEVERAGES]->(tech)
+                OPTIONAL MATCH (v)-[:MITIGATED_BY]->(patch:RemediationPatch)
+                RETURN 
+                    p.name AS package,
+                    v.name AS cve, v.cvss AS cvss, v.type AS vuln_type,
+                    actor.name AS threat_actor,
+                    patch.name AS remediation
+                """
+                # Extract package name prefix for matching
+                dep_search = dep.split(":")[1] if ":" in dep else dep
+                records = list(session.run(cypher, dep_name=dep_search))
+                for r in records:
+                    if r["cve"]:
+                        all_vulnerabilities.add(r["cve"])
+                        if r["threat_actor"]: all_threat_actors.add(r["threat_actor"])
+                        findings.append({
+                            "service": svc.name,
+                            "vulnerable_dependency": dep,
+                            "cve": r["cve"],
+                            "cvss_score": r["cvss"],
+                            "flaw_type": r["vuln_type"],
+                            "exploited_by_threat_actor": r["threat_actor"] or "Undisclosed",
+                            "prescribed_patch": r["remediation"] or "Apply upstream vendor patch"
+                        })
+                        
+    return {
+        "status": "COMPLETED",
+        "total_services_analyzed": len(sbom.services),
+        "critical_vulnerabilities_detected": len(all_vulnerabilities),
+        "active_threat_actors_targeting_stack": list(all_threat_actors),
+        "vulnerability_findings": findings,
+        "security_posture": "CRITICAL RISK" if len(all_vulnerabilities) > 0 else "SECURE"
+    }
+
+class GitHubScanRequest(BaseModel):
+    repo_url: str = Field(..., example="https://github.com/apache/logging-log4j2", description="GitHub URL or owner/repo shorthand")
+    branch: Optional[str] = Field(None, description="Git branch or tag (default: main or master)")
+    manifest_type: Optional[str] = Field(None, description="Specific manifest file (e.g. pom.xml, requirements.txt, package.json)")
+    custom_manifest_content: Optional[str] = Field(None, description="Direct manifest content to evaluate without fetching from GitHub")
+    generate_ai_report: bool = Field(True, description="Whether to include Gemini-generated SOC executive summary")
+
+@app.get("/api/github-presets", tags=["Supply Chain Security"])
+def get_github_presets():
+    """Returns curated presets for quick demonstration and evaluation."""
+    return [
+        {"name": k, "url": v["url"], "description": v["description"], "manifest_type": v["manifest_type"]}
+        for k, v in PRESET_REPOSITORIES.items()
+    ]
+
+@app.post("/api/scan-github-repo", tags=["Supply Chain Security"])
+def scan_github_repo(req: GitHubScanRequest):
+    """
+    Evaluates an external GitHub repository for software supply chain risks, zero-days, and state-sponsored threat actor targets.
+    """
+    t0 = time.time()
+    manifest_content = req.custom_manifest_content
+    manifest_filename = req.manifest_type or "requirements.txt"
+    resolved_branch = req.branch or "main"
+    
+    # 1. Parse repository identifier
+    try:
+        parsed_url = parse_github_url(req.repo_url)
+        owner = parsed_url["owner"]
+        repo = parsed_url["repo"]
+        repo_id = f"{owner}/{repo}"
+        if parsed_url.get("branch") and not req.branch:
+            resolved_branch = parsed_url["branch"]
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid repository URL: {e}")
+        
+    # 2. Fetch manifest from GitHub if not provided directly
+    if not manifest_content:
+        # Check if URL matches a known preset
+        for preset_name, preset_data in PRESET_REPOSITORIES.items():
+            if preset_data["owner"] == owner and preset_data["repo"] == repo:
+                manifest_content = preset_data["simulated_manifest"]
+                manifest_filename = preset_data["manifest_type"]
+                break
+                
+        if not manifest_content:
+            try:
+                manifest_content, manifest_filename, resolved_branch = fetch_repo_manifest(
+                    owner, repo, branch=resolved_branch, specified_file=req.manifest_type
+                )
+            except Exception as e:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Failed to fetch dependency manifest from GitHub repository {repo_id}: {str(e)}. You can supply custom_manifest_content in the request body."
+                )
+                
+    # 3. Parse dependencies
+    packages = parse_generic_manifest(manifest_filename, manifest_content)
+    if not packages:
+        raise HTTPException(
+            status_code=400,
+            detail=f"No software packages or dependencies found in manifest '{manifest_filename}'."
+        )
+        
+    # 4. Evaluate against Neo4j Knowledge Graph
+    evaluation = evaluate_repo_dependencies(driver, packages, repo_id)
+    
+    # 5. Generate AI Executive SOC Briefing
+    ai_report = None
+    if req.generate_ai_report:
+        ai_report = generate_ai_repo_audit_report(repo_id, evaluation, gemini_api_key=GEMINI_API_KEY)
+        
+    evaluation["manifest_filename"] = manifest_filename
+    evaluation["resolved_branch"] = resolved_branch
+    evaluation["executive_threat_report"] = ai_report
+    evaluation["execution_time_seconds"] = round(time.time() - t0, 3)
+    
+    return evaluation
 
 if __name__ == "__main__":
     import uvicorn
