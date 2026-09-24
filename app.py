@@ -148,67 +148,287 @@ USER QUESTION:
         fallback_report += f"{f}\n"
     return fallback_report
 
-# 2D Attack Graph Visualization with Vis.js
+# 2D Attack Graph Visualization with Vis.js (Fine-Tuned & High-Readability)
 def render_attack_graph(nodes_dict, edges):
-    # Color coding by entity category
-    color_map = {
-        "GitHubRepo": "#9D4EDD",        # Purple
-        "ThreatActor": "#E63946",       # Red
-        "AttackTechnique": "#F4A261",   # Orange
-        "Vulnerability": "#D62828",     # Crimson
-        "SoftwarePackage": "#E9C46A",   # Gold
-        "EnterpriseService": "#00ADB5", # Cyan
-        "RemediationPatch": "#2A9D8F"   # Teal / Green
+    # Professional SOC theme palette
+    theme = {
+        "GitHubRepo": {
+            "bg": "#5B21B6", "border": "#A78BFA", "highlight": "#7C3AED",
+            "icon": "🐙", "badge": "Repo"
+        },
+        "ThreatActor": {
+            "bg": "#991B1B", "border": "#F87171", "highlight": "#DC2626",
+            "icon": "👤", "badge": "Adversary"
+        },
+        "AttackTechnique": {
+            "bg": "#9A3412", "border": "#FB923C", "highlight": "#EA580C",
+            "icon": "⚡", "badge": "Technique"
+        },
+        "Vulnerability": {
+            "bg": "#9F1239", "border": "#FB7185", "highlight": "#E11D48",
+            "icon": "🚨", "badge": "CVE"
+        },
+        "SoftwarePackage": {
+            "bg": "#854D0E", "border": "#FACC15", "highlight": "#CA8A04",
+            "icon": "📦", "badge": "Package"
+        },
+        "EnterpriseService": {
+            "bg": "#075985", "border": "#38BDF8", "highlight": "#0284C7",
+            "icon": "🖥️", "badge": "Service"
+        },
+        "RemediationPatch": {
+            "bg": "#065F46", "border": "#34D399", "highlight": "#059669",
+            "icon": "🛡️", "badge": "Remediation"
+        },
+        "SecurityControl": {
+            "bg": "#374151", "border": "#9CA3AF", "highlight": "#4B5563",
+            "icon": "🔒", "badge": "Control"
+        }
     }
-    
+
+    edge_color_map = {
+        "EXPLOITS": "#F43F5E",
+        "EXPLOITS_FLAW_IN": "#F43F5E",
+        "TARGETS": "#F43F5E",
+        "TARGETS_VULNERABILITY": "#F43F5E",
+        "CAN_PIVOT_TO": "#FB923C",
+        "LATERAL_MOVEMENT": "#FB923C",
+        "MITIGATED_BY": "#34D399",
+        "PROTECTED_BY": "#34D399",
+        "LEVERAGES": "#C084FC",
+        "INCLUDES": "#38BDF8",
+        "DEPENDS_ON": "#38BDF8",
+        "RUNS_SOFTWARE": "#38BDF8"
+    }
+
     vis_nodes = []
     for name, label in nodes_dict.items():
-        color = color_map.get(label, "#A8DADC")
-        shape = "hexagon" if label == "GitHubRepo" else ("box" if label == "EnterpriseService" else "dot")
-        size = 26 if label in ["GitHubRepo", "ThreatActor", "Vulnerability"] else 16
-        vis_nodes.append({
-            "id": name,
-            "label": f"[{label}]\n{name}",
-            "color": color,
-            "font": {"color": "#FFFFFF", "size": 12},
-            "shape": shape,
-            "size": size
+        style = theme.get(label, {
+            "bg": "#1E293B", "border": "#94A3B8", "highlight": "#334155",
+            "icon": "🔹", "badge": label
         })
         
-    vis_edges = [{"from": e["from"], "to": e["to"], "label": e["label"], "arrows": "to", "color": {"color": "#888888"}} for e in edges]
-    
+        # Clean formatted display label with smart truncation
+        short_title = name
+        subtitle = ""
+        
+        if label == "SoftwarePackage":
+            parts = name.split(":")
+            if len(parts) >= 3:
+                short_title = parts[1]
+                subtitle = f"v{parts[2]}"
+            elif len(parts) == 2:
+                short_title = parts[0]
+                subtitle = f"v{parts[1]}"
+        elif label == "Vulnerability":
+            if "(" in name and ")" in name:
+                parts = name.split("(")
+                subtitle = parts[0].strip()
+                short_title = parts[1].replace(")", "").strip()
+        elif label == "ThreatActor":
+            if "(" in name:
+                short_title = name.replace("(", "\n(").strip()
+        elif label == "RemediationPatch":
+            parts = name.split("(")
+            short_title = parts[0].strip()
+            if len(parts) > 1:
+                subtitle = parts[1].replace(")", "").strip()
+        elif label == "GitHubRepo":
+            short_title = name.replace("Repo: ", "").strip()
+            
+        display_label = f"[{style['badge'].upper()}]\n{style['icon']} {short_title}"
+        if subtitle:
+            display_label += f"\n({subtitle})"
+            
+        vis_nodes.append({
+            "id": name,
+            "label": display_label,
+            "title": f"<b>[{label}]</b><br>{name}",
+            "color": {
+                "background": style["bg"],
+                "border": style["border"],
+                "highlight": {
+                    "background": style["highlight"],
+                    "border": "#FFFFFF"
+                },
+                "hover": {
+                    "background": style["highlight"],
+                    "border": "#FFFFFF"
+                }
+            },
+            "font": {
+                "color": "#F8FAFC",
+                "size": 12,
+                "face": "system-ui, -apple-system, Segoe UI, Roboto, sans-serif",
+                "align": "center"
+            },
+            "shape": "box",
+            "margin": 10,
+            "shapeProperties": {
+                "borderRadius": 6
+            },
+            "borderWidth": 2,
+            "borderWidthSelected": 3,
+            "shadow": {
+                "enabled": True,
+                "color": "rgba(0,0,0,0.6)",
+                "size": 8,
+                "x": 2,
+                "y": 2
+            }
+        })
+        
+    vis_edges = []
+    for e in edges:
+        lbl = e["label"]
+        edge_color = edge_color_map.get(lbl, "#94A3B8")
+        is_critical = lbl in ["EXPLOITS", "EXPLOITS_FLAW_IN", "CAN_PIVOT_TO", "LATERAL_MOVEMENT"]
+        
+        vis_edges.append({
+            "from": e["from"],
+            "to": e["to"],
+            "label": lbl,
+            "arrows": {
+                "to": {
+                    "enabled": True,
+                    "scaleFactor": 0.85,
+                    "type": "arrow"
+                }
+            },
+            "color": {
+                "color": edge_color,
+                "highlight": "#FFFFFF",
+                "hover": "#FFFFFF"
+            },
+            "width": 2.5 if is_critical else 1.8,
+            "dashes": True if lbl in ["MITIGATED_BY", "PROTECTED_BY"] else False,
+            "font": {
+                "size": 10,
+                "color": "#E2E8F0",
+                "background": "#0F172A",
+                "strokeWidth": 0,
+                "align": "horizontal"
+            },
+            "smooth": {
+                "type": "curvedCW",
+                "roundness": 0.16
+            }
+        })
+        
     html = f"""
     <!DOCTYPE html>
     <html>
     <head>
       <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
       <style type="text/css">
+        body {{
+          margin: 0;
+          padding: 0;
+          font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+          background-color: transparent;
+        }}
+        #graph-wrapper {{
+          position: relative;
+          width: 100%;
+          height: 600px;
+          border: 1px solid #334155;
+          border-radius: 10px;
+          background: radial-gradient(circle at 50% 50%, #111827 0%, #0B0F19 100%);
+          overflow: hidden;
+          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+        }}
         #network {{
           width: 100%;
-          height: 520px;
-          border: 1px solid #333;
-          background-color: #0F172A;
-          border-radius: 8px;
+          height: 100%;
+        }}
+        .toolbar {{
+          position: absolute;
+          top: 12px;
+          right: 12px;
+          z-index: 100;
+          display: flex;
+          gap: 6px;
+          background: rgba(15, 23, 42, 0.85);
+          backdrop-filter: blur(4px);
+          padding: 5px 8px;
+          border-radius: 6px;
+          border: 1px solid #334155;
+        }}
+        .tool-btn {{
+          background: #1E293B;
+          color: #E2E8F0;
+          border: 1px solid #475569;
+          border-radius: 4px;
+          padding: 4px 10px;
+          font-size: 11px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.15s ease;
+        }}
+        .tool-btn:hover {{
+          background: #3B82F6;
+          border-color: #60A5FA;
+          color: #FFFFFF;
         }}
       </style>
     </head>
     <body>
-      <div id="network"></div>
+      <div id="graph-wrapper">
+        <div class="toolbar">
+          <button class="tool-btn" onclick="network.moveTo({{scale: network.getScale() * 1.3}})">🔍 +</button>
+          <button class="tool-btn" onclick="network.moveTo({{scale: network.getScale() * 0.7}})">🔍 -</button>
+          <button class="tool-btn" onclick="network.fit({{animation: {{duration: 400}}}})">🎯 Fit</button>
+          <button class="tool-btn" id="freeze-btn" onclick="togglePhysics()">⏸️ Freeze</button>
+        </div>
+        <div id="network"></div>
+      </div>
+
       <script type="text/javascript">
         var nodes = new vis.DataSet({json.dumps(vis_nodes)});
         var edges = new vis.DataSet({json.dumps(vis_edges)});
         var container = document.getElementById('network');
         var data = {{ nodes: nodes, edges: edges }};
+        
         var options = {{
-          physics: {{ stabilization: true, barnesHut: {{ springLength: 140, springConstant: 0.04, damping: 0.12 }} }},
-          edges: {{ font: {{ size: 10, align: 'middle', color: '#38BDF8' }}, smooth: {{ type: 'continuous' }} }}
+          physics: {{
+            enabled: true,
+            solver: 'forceAtlas2Based',
+            forceAtlas2Based: {{
+              gravitationalConstant: -75,
+              centralGravity: 0.015,
+              springLength: 180,
+              springConstant: 0.08,
+              damping: 0.45,
+              avoidOverlap: 1.0
+            }},
+            stabilization: {{
+              enabled: true,
+              iterations: 200,
+              updateInterval: 25
+            }}
+          }},
+          interaction: {{
+            hover: true,
+            tooltipDelay: 100,
+            zoomView: true,
+            dragView: true
+          }}
         }};
+        
         var network = new vis.Network(container, data, options);
+        var physicsEnabled = true;
+        
+        function togglePhysics() {{
+          physicsEnabled = !physicsEnabled;
+          network.setOptions({{ physics: {{ enabled: physicsEnabled }} }});
+          var btn = document.getElementById('freeze-btn');
+          btn.innerText = physicsEnabled ? '⏸️ Freeze' : '▶️ Unfreeze';
+        }}
       </script>
     </body>
     </html>
     """
-    components.html(html, height=540)
+    components.html(html, height=620)
 
 # Layout
 col1, col2 = st.columns([1, 1])
@@ -460,8 +680,16 @@ with col1:
 with col2:
     st.subheader("🕸️ Interactive Attack Graph & Blast Radius")
     st.markdown("""
-    **Legend:** 🟣 GitHub Repo | 🔴 Threat Actor | 🟠 MITRE Technique | 🚨 Vulnerability (CVE) | 🟡 Vulnerable Library | 🔵 Enterprise Service | 🟢 Remediation Patch
-    """)
+    <div style="display: flex; flex-wrap: wrap; gap: 6px; font-size: 11px; margin-bottom: 10px; font-weight: 600;">
+        <span style="background: #5B21B6; color: #EDE9FE; padding: 3px 8px; border-radius: 4px; border: 1px solid #7C3AED;">🐙 Repo</span>
+        <span style="background: #991B1B; color: #FEE2E2; padding: 3px 8px; border-radius: 4px; border: 1px solid #EF4444;">👤 Adversary</span>
+        <span style="background: #9A3412; color: #FFEDD5; padding: 3px 8px; border-radius: 4px; border: 1px solid #FB923C;">⚡ Technique</span>
+        <span style="background: #9F1239; color: #FFE4E6; padding: 3px 8px; border-radius: 4px; border: 1px solid #FB7185;">🚨 CVE</span>
+        <span style="background: #854D0E; color: #FEF9C3; padding: 3px 8px; border-radius: 4px; border: 1px solid #FACC15;">📦 Package</span>
+        <span style="background: #075985; color: #E0F2FE; padding: 3px 8px; border-radius: 4px; border: 1px solid #38BDF8;">🖥️ Service</span>
+        <span style="background: #065F46; color: #D1FAE5; padding: 3px 8px; border-radius: 4px; border: 1px solid #34D399;">🛡️ Remediation</span>
+    </div>
+    """, unsafe_allow_html=True)
     if "edges" in st.session_state and st.session_state["edges"]:
         st.caption(f"Showing attack path for: {', '.join(st.session_state['entities'])} (Click & Drag nodes)")
         render_attack_graph(st.session_state["nodes_dict"], st.session_state["edges"])
