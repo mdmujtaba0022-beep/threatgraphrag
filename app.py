@@ -898,107 +898,124 @@ def render_attack_graph(nodes_dict, edges, nodes_meta=None, graph_height=720):
     """
     components.html(html, height=wrapper_h + 20)
 
-# Layout & Window Dimensions Controls
-with st.expander("📐 Viewport & Window Dimensions (Layout Split • Graph Canvas Height • Report Viewport)", expanded=True):
-    ctrl_col1, ctrl_col2, ctrl_col3 = st.columns([1.5, 1.2, 1.2])
-    with ctrl_col1:
-        layout_mode = st.selectbox(
-            "📐 Viewport Layout / Split Mode:",
-            [
-                "⚖️ Balanced (50% Report / 50% Graph)",
-                "🕸️ Wide Graph (35% Report / 65% Graph)",
-                "📋 Wide Report (65% Report / 35% Graph)",
-                "🪐 Max Graph (20% Report / 80% Graph)",
-                "📑 Max Report (80% Report / 20% Graph)",
-                "🎯 Custom Split Ratio (%)",
-                "📚 Stacked: Graph on Top (100%), Report Below",
-                "📚 Stacked: Report on Top (100%), Graph Below"
-            ],
-            index=0,
-            key="layout_mode_select"
-        )
-        if layout_mode == "🎯 Custom Split Ratio (%)":
-            custom_ratio = st.slider("Report Width (%)", 15, 85, 50, 5, key="custom_width_split")
-            col_report_width = custom_ratio
-            col_graph_width = 100 - custom_ratio
-        elif layout_mode == "🕸️ Wide Graph (35% Report / 65% Graph)":
-            col_report_width, col_graph_width = 35, 65
-        elif layout_mode == "📋 Wide Report (65% Report / 35% Graph)":
-            col_report_width, col_graph_width = 65, 35
-        elif layout_mode == "🪐 Max Graph (20% Report / 80% Graph)":
-            col_report_width, col_graph_width = 20, 80
-        elif layout_mode == "📑 Max Report (80% Report / 20% Graph)":
-            col_report_width, col_graph_width = 80, 20
-        else:
-            col_report_width, col_graph_width = 50, 50
+# Minimalist Resizer: Slide Left or Right to Minimize / Maximize panes
+if "split_ratio" not in st.session_state:
+    st.session_state["split_ratio"] = 50
 
-        is_stacked = "Stacked" in layout_mode
-        stacked_order = "graph_first" if "Graph on Top" in layout_mode else "report_first"
+# Compact sliding control bar with 1-click snap buttons
+col_slider, col_btn_graph, col_btn_bal, col_btn_rep = st.columns([5.5, 1.4, 1.0, 1.4])
 
-    with ctrl_col2:
-        graph_height = st.slider(
-            "🕸️ Graph Window Height (px):",
-            min_value=400,
-            max_value=1400,
-            value=720,
-            step=40,
-            help="Resize the interactive attack graph canvas.",
-            key="graph_height_slider"
-        )
-        btn_c1, btn_c2, btn_c3, btn_c4 = st.columns(4)
-        if btn_c1.button("500p", help="Compact 500px"):
-            st.session_state["graph_height_slider"] = 500
-            st.rerun()
-        if btn_c2.button("720p", help="Standard 720px"):
-            st.session_state["graph_height_slider"] = 720
-            st.rerun()
-        if btn_c3.button("960p", help="Expanded 960px"):
-            st.session_state["graph_height_slider"] = 960
-            st.rerun()
-        if btn_c4.button("1200p", help="Cinema 1200px"):
-            st.session_state["graph_height_slider"] = 1200
-            st.rerun()
+with col_slider:
+    split_ratio = st.slider(
+        "↔️ **Slide Left or Right to Resize:** ⬅️ Maximize Graph • 50/50 • Maximize Report ➡️",
+        min_value=15,
+        max_value=85,
+        value=st.session_state["split_ratio"],
+        step=5,
+        format="%d%%",
+        key="split_slider_widget",
+        help="Slide left to minimize report and maximize graph (up to 85%). Slide right to maximize report and minimize graph."
+    )
+    st.session_state["split_ratio"] = split_ratio
 
-    with ctrl_col3:
-        report_scroll_choice = st.selectbox(
-            "📋 Report Window View:",
-            ["📜 Scrollable Window (Fixed Height)", "📄 Auto-Expand (Full Length)"],
-            index=0,
-            key="report_scroll_choice",
-            help="Choose whether reports scroll inside a bounded card or expand down the page."
-        )
-        if report_scroll_choice == "📜 Scrollable Window (Fixed Height)":
-            sync_h = st.checkbox("🔗 Match Graph Height", value=True, key="sync_report_graph_height")
-            if sync_h:
-                report_height = graph_height
-                st.caption(f"Locked to graph height: `{report_height}px`")
-            else:
-                report_height = st.slider(
-                    "📋 Report Window Height (px):",
-                    min_value=350,
-                    max_value=1400,
-                    value=720,
-                    step=40,
-                    key="report_height_slider"
-                )
-        else:
-            report_height = None
-            st.caption("Report expands naturally without vertical bounds.")
+with col_btn_graph:
+    st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True)
+    if st.button("◀ Max Graph", help="Minimize Report to 15%, Maximize Graph to 85%", use_container_width=True):
+        st.session_state["split_ratio"] = 15
+        st.session_state["split_slider_widget"] = 15
+        st.rerun()
 
-# Render Containers according to selected layout
-if is_stacked:
-    if stacked_order == "graph_first":
-        container_graph = st.container()
-        st.markdown("---")
-        container_report = st.container()
-    else:
-        container_report = st.container()
-        st.markdown("---")
-        container_graph = st.container()
-else:
-    col1, col2 = st.columns([col_report_width, col_graph_width])
-    container_report = col1
-    container_graph = col2
+with col_btn_bal:
+    st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True)
+    if st.button("⚖️ 50/50", help="Reset to balanced 50% / 50% split", use_container_width=True):
+        st.session_state["split_ratio"] = 50
+        st.session_state["split_slider_widget"] = 50
+        st.rerun()
+
+with col_btn_rep:
+    st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True)
+    if st.button("Max Report ▶", help="Maximize Report to 85%, Minimize Graph to 15%", use_container_width=True):
+        st.session_state["split_ratio"] = 85
+        st.session_state["split_slider_widget"] = 85
+        st.rerun()
+
+# Layout Columns based on the slide value
+col_report_width = st.session_state["split_ratio"]
+col_graph_width = 100 - col_report_width
+container_report, container_graph = st.columns([col_report_width, col_graph_width])
+
+# Live mouse-draggable splitter handle between panes
+components.html("""
+<script>
+(function() {
+  function attachSplitter() {
+    try {
+      const pDoc = window.parent.document;
+      const cols = pDoc.querySelectorAll('[data-testid="stColumn"]');
+      if (cols.length >= 2) {
+        const colL = cols[0];
+        const colR = cols[1];
+        const parent = colL.parentElement;
+        if (!parent || parent.dataset.splitterAttached) return;
+        parent.dataset.splitterAttached = "true";
+        
+        colL.style.borderRight = "3px solid #334155";
+        colL.style.paddingRight = "14px";
+        colL.style.position = "relative";
+        
+        const handle = pDoc.createElement("div");
+        handle.style.position = "absolute";
+        handle.style.top = "0";
+        handle.style.right = "-8px";
+        handle.style.width = "16px";
+        handle.style.height = "100%";
+        handle.style.cursor = "col-resize";
+        handle.style.zIndex = "999";
+        handle.title = "Click & drag left or right to resize panes";
+        colL.appendChild(handle);
+        
+        let dragging = false;
+        let startX = 0;
+        let startLeftW = 0;
+        
+        handle.addEventListener("mousedown", function(e) {
+          dragging = true;
+          startX = e.clientX;
+          startLeftW = colL.getBoundingClientRect().width;
+          pDoc.body.style.cursor = "col-resize";
+          pDoc.body.style.userSelect = "none";
+          e.preventDefault();
+        });
+        
+        pDoc.addEventListener("mousemove", function(e) {
+          if (!dragging) return;
+          const totalW = parent.getBoundingClientRect().width;
+          const delta = e.clientX - startX;
+          const newW = startLeftW + delta;
+          const pct = Math.max(15, Math.min(85, (newW / totalW) * 100));
+          colL.style.width = pct + "%";
+          colL.style.flex = "none";
+          colR.style.width = (100 - pct) + "%";
+          colR.style.flex = "none";
+        });
+        
+        pDoc.addEventListener("mouseup", function() {
+          if (dragging) {
+            dragging = false;
+            pDoc.body.style.cursor = "";
+            pDoc.body.style.userSelect = "";
+            window.dispatchEvent(new Event("resize"));
+          }
+        });
+      }
+    } catch(err) {
+      console.log("Splitter attach error:", err);
+    }
+  }
+  setTimeout(attachSplitter, 350);
+})();
+</script>
+""", height=0)
 
 with container_report:
     tab_query, tab_sbom, tab_benchmark = st.tabs(["🕵️ Threat Query", "📦 GitHub & SBOM Supply Chain", "📊 Empirical Benchmark"])
@@ -1039,14 +1056,9 @@ with container_report:
                 else:
                     st.success(f"🚀 **Live Generation** (Neo4j Full-Text Traversal: {traversal_ms}ms • Streaming via Gemini)")
 
-                # Token-by-token live streaming inside configured window
+                # Token-by-token live streaming
                 stream_gen = synthesize_technical_report_stream(facts, user_query, client=client)
-                if report_height is not None:
-                    rep_box = st.container(height=report_height)
-                    with rep_box:
-                        answer = st.write_stream(stream_gen)
-                else:
-                    answer = st.write_stream(stream_gen)
+                answer = st.write_stream(stream_gen)
                 st.session_state["answer"] = answer
 
         elif "answer" in st.session_state:
@@ -1066,12 +1078,7 @@ with container_report:
                     use_container_width=True
                 )
 
-            if report_height is not None:
-                rep_box = st.container(height=report_height)
-                with rep_box:
-                    st.markdown(st.session_state["answer"])
-            else:
-                st.markdown(st.session_state["answer"])
+            st.markdown(st.session_state["answer"])
 
             with st.expander("🔍 Discovered Attack Graph Paths (Evidence)"):
                 for f in st.session_state["facts"]:
@@ -1179,12 +1186,7 @@ with container_report:
                         
                 if "repo_ai_report" in st.session_state and st.session_state["repo_ai_report"]:
                     with st.expander("📋 SOC Threat Intelligence & Remediation Roadmap (AI-Generated)", expanded=True):
-                        if report_height is not None:
-                            sbom_rep_box = st.container(height=report_height)
-                            with sbom_rep_box:
-                                st.markdown(st.session_state["repo_ai_report"])
-                        else:
-                            st.markdown(st.session_state["repo_ai_report"])
+                        st.markdown(st.session_state["repo_ai_report"])
                         
                 st.success("✅ Interactive Attack Graph on the right updated with the repository supply chain topology!")
 
@@ -1346,7 +1348,7 @@ with container_graph:
     </div>
     """, unsafe_allow_html=True)
     if "edges" in st.session_state and st.session_state["edges"]:
-        st.caption(f"Showing attack path for: {', '.join(st.session_state.get('entities', []))} • (Click any node to inspect in HUD • Window: {graph_height}px)")
-        render_attack_graph(st.session_state["nodes_dict"], st.session_state["edges"], st.session_state.get("nodes_meta"), graph_height=graph_height)
+        st.caption(f"Showing attack path for: {', '.join(st.session_state.get('entities', []))} • (Click any node to inspect in HUD)")
+        render_attack_graph(st.session_state["nodes_dict"], st.session_state["edges"], st.session_state.get("nodes_meta"), graph_height=700)
     else:
         st.info("Execute a threat scenario on the left to visualize the attack path and lateral movement graph!")
