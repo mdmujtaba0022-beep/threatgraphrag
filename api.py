@@ -16,6 +16,7 @@ from src.repo_evaluator import (
     generate_ai_repo_audit_report,
     PRESET_REPOSITORIES
 )
+from src.report_generator import synthesize_technical_report
 
 load_dotenv()
 
@@ -160,25 +161,8 @@ def query_threat_graph(request: QueryRequest):
                 if fact not in facts:
                     facts.append(fact)
                     
-    # 3. Grounded Synthesis with Gemini
-    context = "\n".join(facts) if facts else "No direct attack graph paths found."
-    prompt = f"""You are a Principal Cyber Threat Intelligence Analyst.
-Analyze the user question STRICTLY using the attack graph paths provided:
-{context}
-
-QUESTION: {request.query}
-
-Output a clean, executive SOC advisory with Threat Summary, Multi-Hop Attack Path, and Prescribed Patches.
-"""
-    try:
-        res = client.models.generate_content(
-            model="gemini-3.6-flash",
-            contents=prompt,
-            config=types.GenerateContentConfig(temperature=0.2)
-        )
-        report = res.text
-    except Exception as e:
-        report = f"Graph facts retrieved: {context}\n(Automated report fallback: {e})"
+    # 3. Grounded Technical Synthesis
+    report = synthesize_technical_report(facts, request.query, client=client)
         
     return QueryResponse(
         query=request.query,

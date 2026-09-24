@@ -527,42 +527,101 @@ EVALUATION TELEMETRY:
 - Graph Correlation Findings:
 {findings_summary}
 
-Generate an authoritative, concise Executive Repository Audit Report in GitHub Markdown containing:
-1. Executive Security Briefing: Risk summary and business impact if merged/deployed.
-2. Adversary Attack Vectors & Exploitation Chain: How the identified threat actors exploit these vulnerabilities through the supply chain.
-3. Enterprise Blast Radius Simulation: How this repository impacts downstream microservices and cloud infrastructure.
-4. Prioritized Remediation Roadmap: Exact step-by-step actions, patches, and compiler/runtime workarounds.
+Generate an authoritative, deeply technical, and legible Executive Repository Audit Report in GitHub Markdown containing:
+### 1. 🛡️ Executive Threat Briefing & Risk Scorecard
+- Summary table: Package | Target CVE | CVSS v3.1 | Threat Actor | Status
+- 2-3 concise bullet points summarizing deployment risk and business impact.
 
-Keep it direct, professional, and actionable. Do not use complex unicode characters that break cp1252.
+### 2. 🔬 Supply Chain Attack Vectors & Exploitation Mechanics
+- Technical breakdown of the vulnerability class (e.g. JNDI injection, classloader override, upstream build macro tampering).
+- Full dependency kill-chain vector:
+  `[Repository: {repo_identifier}]` ──► `[Software Package]` ──► `[CVE]` ──► `[Adversary / Campaign]`
+
+### 3. 💥 Enterprise Blast Radius Simulation
+- Detail which microservices and infrastructure components would be exposed if this repository is deployed into production.
+- Potential lateral movement pathways to internal databases, credentials, or payment channels.
+
+### 4. 🛠️ Prioritized Technical Remediation Protocol
+- **Tier 1 (Immediate Containment)**: Compiler flags, runtime JVM/OS parameters, or WAF rules.
+- **Tier 2 (Upstream Patching)**: Specific recommended patch versions and manifest lockfile updates.
+- **Tier 3 (Zero-Trust Hardening)**: CI/CD dependency pinning, SLSA provenance verification, and container least-privilege policies.
 """
     
     if api_key:
         try:
             from google import genai
             client = genai.Client(api_key=api_key)
-            for model_id in ["gemini-2.5-flash", "gemini-3.6-flash"]:
+            for model_id in ["gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-3.6-flash"]:
                 try:
-                    resp = client.models.generate_content(model=model_id, contents=prompt)
-                    if resp.text:
-                        return resp.text
+                    resp = client.models.generate_content(
+                        model=model_id,
+                        contents=prompt,
+                        config=types.GenerateContentConfig(temperature=0.1)
+                    )
+                    if resp.text and len(resp.text.strip()) > 200:
+                        return resp.text.strip()
                 except Exception:
                     continue
         except Exception as e:
             logger.warning(f"Gemini API call failed: {e}")
 
-    # Fallback template if Gemini is unavailable
-    return f"""### Executive Repository Security Audit: {repo_identifier}
-**Threat Posture:** {posture} | **Active Threat Actors:** {", ".join(actors) if actors else "Known APT Groups"}
+    # High-Fidelity Deterministic Fallback Report
+    findings_rows = "\n".join([
+        f"| `{f['detected_package']}` | **{f['cve']}** | **{f['cvss_score']} (Critical)** | **{f['exploited_by_adversary']}** | Active Exploit |"
+        for f in findings
+    ])
+    
+    return f"""### 🛡️ Executive Supply Chain Security Audit: {repo_identifier}
+**Threat Posture:** `{posture}` | **Risk Rating:** HIGH/CRITICAL | **Active APT Actors:** {", ".join(actors) if actors else "Unattributed"}
 
-#### 1. Threat Summary
-Automated graph traversal discovered **{len(findings)} supply chain exposure(s)** across **{total_scanned}** audited packages. The repository imports components with unmitigated remote code execution or backdoor vulnerabilities actively exploited in the wild.
+---
 
-#### 2. Discovered Vulnerability Matrix
-{findings_summary}
+#### 1. 📋 Executive Threat Briefing & Risk Scorecard
 
-#### 3. Recommended Remediation
-1. **Immediate Dependency Freeze**: Halt deployment pipelines referencing these dependencies.
-2. **Apply Prescribed Upstream Patches**:
-{chr(10).join([f"   - {f['cve']}: {f['prescribed_remediation']}" for f in findings[:4]])}
-3. **Network Isolation**: Implement zero-trust egress filtering to block adversarial lateral movement and C2 communications.
+| Audited Dependency | Identified CVE | CVSS v3.1 Severity | Attributed Adversary | Exploit Status |
+| :--- | :--- | :--- | :--- | :--- |
+{findings_rows}
+
+* **Immediate Threat:** Automated graph analysis confirmed that `{repo_identifier}` imports libraries with unmitigated remote code execution or backdoor vulnerabilities actively exploited in the wild.
+* **Adversary Targeting:** State-sponsored groups (**{", ".join(actors) if actors else "Known APT Groups"}**) are actively weaponizing these vulnerabilities to achieve initial footholds in enterprise environments.
+
+---
+
+#### 2. 🔬 Technical Exploitation Mechanics & Supply Chain Vector
+
+```
+[Repository: {repo_identifier}]
+          │
+          ▼  (INCLUDES_DEPENDENCY)
+[Software Package: {findings[0]['detected_package'] if findings else 'Target Component'}]
+          │
+          ▼  (EXPLOITED_BY)
+[Vulnerability: {findings[0]['cve'] if findings else 'Discovered Zero-Day'}]
+          │
+          ▼  (TARGETED_BY)
+[Threat Actor: {", ".join(actors) if actors else 'Hostile Adversary'}]
+```
+
+* **Vulnerability Analysis:** Vulnerable routines allow external attackers to trigger unauthenticated arbitrary code execution or backdoor command hooks within the hosting application's runtime.
+* **Build & Deployment Risk:** Integrating this codebase directly injects vulnerable binaries into production container images, bypassing standard perimeter firewalls.
+
+---
+
+#### 3. 💥 Enterprise Blast Radius Simulation
+
+* **Direct Exposure Asset:** Microservices integrating `{repo_identifier}` (e.g. Ingress gateways, Authentication services).
+* **Lateral Movement Vectors:** Compromised containers can be leveraged to extract cloud service account keys (IAM), dump internal environment variables, and pivot to backend transaction systems.
+
+---
+
+#### 4. 🛠️ Prioritized Technical Remediation Protocol
+
+* **Tier 1: Immediate Containment (Within 1 Hour)**
+  - Halt automated CI/CD deployment pipelines referencing `{repo_identifier}` until dependencies are remediated.
+  - Apply runtime hotfix flags and restrict outbound container egress.
+* **Tier 2: Upstream Patch Deployment (Within 24 Hours)**
+{chr(10).join([f"  - Pin and upgrade `{f['detected_package']}` to prescribed patch: **{f['prescribed_remediation']}**" for f in findings])}
+* **Tier 3: Supply Chain Integrity & Zero-Trust (Within 7 Days)**
+  - Implement SLSA Level 3 provenance checks and automated dependency hash verification in CI/CD.
+  - Enforce software bill of materials (SBOM) scanning on all release pull requests.
 """

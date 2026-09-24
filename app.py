@@ -18,6 +18,7 @@ from src.repo_evaluator import (
     generate_ai_repo_audit_report,
     PRESET_REPOSITORIES
 )
+from src.report_generator import synthesize_technical_report
 
 # Page config
 st.set_page_config(page_title="ThreatGraphRAG | Cyber Threat Intelligence", layout="wide", page_icon="🛡️")
@@ -111,42 +112,7 @@ def fetch_threat_subgraph(entities: List[str]):
     return facts, nodes_dict, edges_list
 
 def answer_threat_query(query: str, facts: List[str]) -> str:
-    context = "\n".join(facts) if facts else "No direct attack graph paths discovered."
-    prompt = f"""You are a Principal Cyber Threat Intelligence & SOC Analyst.
-Analyze the user question STRICTLY using the attack graph paths and dependency topologies provided below.
-
-Structure your response clearly with:
-1. 🎯 Executive Threat Summary
-2. ⛓️ Multi-Hop Attack Path (Trace step-by-step from Threat Actor -> Technique -> CVE -> Vulnerable Dependency -> Target Service)
-3. 💥 Blast Radius & Lateral Movement Risks
-4. 🛡️ Prescribed Remediation & Patching Steps
-
-ATTACK GRAPH FACTS:
-{context}
-
-USER QUESTION:
-{query}
-"""
-    models_to_try = ["gemini-3.6-flash", "gemini-2.5-flash"]
-    for m in models_to_try:
-        for attempt in range(2):
-            try:
-                res = client.models.generate_content(
-                    model=m,
-                    contents=prompt,
-                    config=types.GenerateContentConfig(temperature=0.2)
-                )
-                if res.text:
-                    return res.text
-            except Exception:
-                time.sleep(2)
-                
-    # Direct graph-grounded report if external API is temporarily unavailable
-    fallback_report = f"### 🛡️ Threat Intelligence Report (Generated from Direct Neo4j Subgraph)\n\n"
-    fallback_report += f"**Discovered Attack Chains:**\n"
-    for f in facts:
-        fallback_report += f"{f}\n"
-    return fallback_report
+    return synthesize_technical_report(facts, query, client=client)
 
 # 2D Attack Graph Visualization with Vis.js (Fine-Tuned & High-Readability)
 def render_attack_graph(nodes_dict, edges):
