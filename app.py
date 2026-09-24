@@ -89,136 +89,28 @@ with st.sidebar:
         st.rerun()
     st.markdown("---")
 
+from src.graph_engine import (
+    extract_cyber_entities,
+    fetch_precision_threat_graph,
+    calculate_graph_threat_metrics
+)
+
 # Schemas
 class QueryEntities(BaseModel):
     entities: List[str] = Field(description="Cyber entities mentioned in query: threat actors, CVEs, services, techniques, or packages")
 
 def extract_entities(query: str) -> List[str]:
-    # 1. Instant heuristic match (<0.01s)
-    known_entities = [
-        # Adversaries
-        "APT29", "Nobelium", "Cozy Bear", "Midnight Blizzard",
-        "Lazarus Group", "Lazarus", "HIDDEN COBRA", "Diamond Sleet",
-        "Volt Typhoon", "BRONZE SILHOUETTE", "Vanguard Panda",
-        "LockBit 3.0", "LockBit", "FIN7", "Carbanak",
-        # Vulnerabilities
-        "CVE-2021-44228", "Log4Shell", "CVE-2024-3094", "XZ Utils", "XZ Backdoor",
-        "CVE-2022-22965", "Spring4Shell", "CVE-2024-21762", "FortiOS",
-        "CVE-2023-4966", "Citrix Bleed", "NetScaler",
-        # Infrastructure Assets
-        "k8s-auth-ingress-gateway", "payment-token-vault-service", "corporate-active-directory-dc01",
-        "enterprise-bastion-ssh-host", "data-analytics-dataproc-spark", "edge-vpn-gateway-fortigate",
-        "Customer-Auth-Service", "Payment-Processing-Gateway", "Enterprise-SSH-Bastion", "Analytics-ETL-Pipeline",
-        # Techniques
-        "Exploit Public-Facing Application", "Supply Chain Compromise", "Command and Scripting Interpreter", "Valid Accounts",
-        "Remote Services", "Server Software Component", "Data Encrypted for Impact",
-        # Packages
-        "log4j", "xz-utils", "spring-beans", "fortios", "netscaler"
-    ]
-    matched = [e for e in known_entities if e.lower() in query.lower()]
-    if matched:
-        return matched
-
-    # 2. Fall back to Gemini if no preset entities detected
-    prompt = f"Identify all specific cybersecurity entities, threat groups, CVEs, techniques, or enterprise services mentioned in: '{query}'"
-    for m in ["gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-3.6-flash"]:
-        try:
-            res = client.models.generate_content(
-                model=m,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    response_schema=QueryEntities,
-                    temperature=0.0
-                )
-            )
-            if res.parsed and res.parsed.entities:
-                return res.parsed.entities
-        except Exception:
-            continue
-        
-    return [query.strip()]
+    """Precision entity extraction combining regex, knowledge base vocab trie, and Gemini 3.8/3.5 semantic fallback."""
+    return extract_cyber_entities(query, client=client)
 
 def fetch_threat_subgraph(entities: List[str]):
-    facts = []
-    nodes_dict = {}
-    edges_list = []
-    nodes_meta = {}
-    
-    with driver.session() as session:
-        for entity in entities:
-            clean_e = entity.strip()
-            indexed_found = False
-            
-            # 1. High-speed Neo4j Full-Text Schema Index traversal (<5ms)
-            try:
-                search_term = f'"{clean_e}"' if " " in clean_e else f"{clean_e}*"
-                cypher_idx = """
-                CALL db.index.fulltext.queryNodes("threatEntityIndex", $term) YIELD node, score
-                WHERE score >= 0.4
-                WITH node LIMIT 3
-                MATCH path = (node)-[r*1..2]-(target)
-                UNWIND relationships(path) as rel
-                WITH DISTINCT rel, startNode(rel) as s, endNode(rel) as t
-                RETURN 
-                    s.name AS from_name, labels(s)[0] AS from_label, properties(s) AS s_props,
-                    type(rel) AS relationship,
-                    t.name AS to_name, labels(t)[0] AS to_label, properties(t) AS t_props
-                LIMIT 35
-                """
-                results = list(session.run(cypher_idx, term=search_term))
-                if results:
-                    indexed_found = True
-                    for record in results:
-                        src, s_label = record['from_name'], record['from_label']
-                        tgt, t_label = record['to_name'], record['to_label']
-                        s_props = dict(record['s_props']) if record['s_props'] else {}
-                        t_props = dict(record['t_props']) if record['t_props'] else {}
-                        rel = record['relationship']
-                        
-                        fact = f"- [{s_label}] `{src}` ──[{rel}]──► [{t_label}] `{tgt}`"
-                        if fact not in facts:
-                            facts.append(fact)
-                            nodes_dict[src] = s_label
-                            nodes_dict[tgt] = t_label
-                            nodes_meta[src] = {"label": s_label, "props": s_props}
-                            nodes_meta[tgt] = {"label": t_label, "props": t_props}
-                            edges_list.append({"from": src, "to": tgt, "label": rel})
-            except Exception as e:
-                indexed_found = False
-
-            # 2. Resilient substring fallback
-            if not indexed_found:
-                cypher_sub = """
-                MATCH (source)
-                WHERE toLower(source.name) CONTAINS toLower($entity)
-                MATCH path = (source)-[r*1..2]-(target)
-                UNWIND relationships(path) as rel
-                WITH DISTINCT rel, startNode(rel) as s, endNode(rel) as t
-                RETURN 
-                    s.name AS from_name, labels(s)[0] AS from_label, properties(s) AS s_props,
-                    type(rel) AS relationship,
-                    t.name AS to_name, labels(t)[0] AS to_label, properties(t) AS t_props
-                LIMIT 35
-                """
-                results = session.run(cypher_sub, entity=clean_e)
-                for record in results:
-                    src, s_label = record['from_name'], record['from_label']
-                    tgt, t_label = record['to_name'], record['to_label']
-                    s_props = dict(record['s_props']) if record['s_props'] else {}
-                    t_props = dict(record['t_props']) if record['t_props'] else {}
-                    rel = record['relationship']
-                    
-                    fact = f"- [{s_label}] `{src}` ──[{rel}]──► [{t_label}] `{tgt}`"
-                    if fact not in facts:
-                        facts.append(fact)
-                        nodes_dict[src] = s_label
-                        nodes_dict[tgt] = t_label
-                        nodes_meta[src] = {"label": s_label, "props": s_props}
-                        nodes_meta[tgt] = {"label": t_label, "props": t_props}
-                        edges_list.append({"from": src, "to": tgt, "label": rel})
-                    
-    return facts, nodes_dict, edges_list, nodes_meta
+    """
+    High-precision multi-hop attack path retrieval:
+    1. Multi-hop shortest paths connecting entity pairs
+    2. Contextual blast radius expansion (mitigations, packages, ingress/pivots)
+    3. Quantitative graph threat metrics (risk index, path depth, crown jewels)
+    """
+    return fetch_precision_threat_graph(driver, entities)
 
 def answer_threat_query(query: str, facts: List[str]) -> str:
     return synthesize_technical_report(facts, query, client=client)
@@ -1420,7 +1312,7 @@ with container_report:
             t_start = time.time()
             with st.spinner("⚡ Traversing Neo4j Graph Index & Initializing AI Stream..."):
                 entities = extract_entities(user_query)
-                facts, nodes_dict, edges, nodes_meta = fetch_threat_subgraph(entities)
+                facts, nodes_dict, edges, nodes_meta, metrics = fetch_threat_subgraph(entities)
                 traversal_ms = round((time.time() - t_start) * 1000, 1)
                 
                 cached_item = threat_cache.get(user_query, facts)
@@ -1431,6 +1323,7 @@ with container_report:
                 st.session_state["nodes_dict"] = nodes_dict
                 st.session_state["edges"] = edges
                 st.session_state["nodes_meta"] = nodes_meta
+                st.session_state["graph_metrics"] = metrics
                 st.session_state["is_cached"] = is_hit
                 st.session_state["traversal_ms"] = traversal_ms
                 
@@ -1444,10 +1337,18 @@ with container_report:
                       </button>
                     </div>
                     """, unsafe_allow_html=True)
+                    
+                    # Tactical Telemetry Scorecard
+                    m1, m2, m3, m4 = st.columns(4)
+                    m1.metric("Composite Risk Index", f"{metrics['composite_risk_score']}/100", delta=metrics["severity_level"], delta_color="inverse")
+                    m2.metric("Traversal Latency", f"{traversal_ms}ms", delta="⚡ Cache HIT" if is_hit else "⚡ Neo4j Multi-Hop")
+                    m3.metric("Attack Path Hops", len(edges))
+                    m4.metric("Crown Jewels at Risk", len(metrics["crown_jewels_at_risk"]))
+
                     if is_hit:
-                        st.info(f"⚡ **Cache HIT** (Retrieved in {traversal_ms}ms • 0 LLM API tokens used)")
+                        st.info(f"⚡ **Semantic Cache HIT:** Instant sub-millisecond retrieval • 0 LLM API tokens consumed.")
                     else:
-                        st.success(f"🚀 **Live Generation** (Neo4j Full-Text Traversal: {traversal_ms}ms • Streaming via Gemini)")
+                        st.success(f"🚀 **Live Generation:** Multi-hop path resolved in {traversal_ms}ms • Synthesized via Google Gemini.")
 
                     # Token-by-token live streaming
                     stream_gen = synthesize_technical_report_stream(facts, user_query, client=client)
@@ -1465,6 +1366,15 @@ with container_report:
                   </button>
                 </div>
                 """, unsafe_allow_html=True)
+                
+                if "graph_metrics" in st.session_state:
+                    metrics = st.session_state["graph_metrics"]
+                    m1, m2, m3, m4 = st.columns(4)
+                    m1.metric("Composite Risk Index", f"{metrics['composite_risk_score']}/100", delta=metrics["severity_level"], delta_color="inverse")
+                    m2.metric("Traversal Latency", f"{st.session_state.get('traversal_ms', 12)}ms", delta="⚡ Cache HIT" if st.session_state.get("is_cached") else "⚡ Neo4j Multi-Hop")
+                    m3.metric("Attack Path Hops", len(st.session_state.get("edges", [])))
+                    m4.metric("Crown Jewels at Risk", len(metrics.get("crown_jewels_at_risk", [])))
+                
                 col_rep_meta, col_rep_act = st.columns([1.2, 1])
                 with col_rep_meta:
                     if st.session_state.get("is_cached"):

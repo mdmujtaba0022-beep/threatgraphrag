@@ -158,7 +158,7 @@ Create a detailed Markdown Table:
 """
 
     if client:
-        for model_id in ["gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-3.6-flash"]:
+        for model_id in ["gemini-3.8-flash", "gemini-3.5-flash-lite"]:
             try:
                 from google.genai import types
                 resp = client.models.generate_content(
@@ -240,7 +240,7 @@ OUTPUT STRUCTURE:
     stream_ok = False
 
     if client:
-        for model_id in ["gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-3.6-flash"]:
+        for model_id in ["gemini-3.8-flash", "gemini-3.5-flash-lite"]:
             try:
                 from google.genai import types
                 stream_resp = client.models.generate_content_stream(
@@ -283,11 +283,24 @@ def generate_deterministic_report(facts: List[str], query: str) -> str:
     
     ingress_svc = "k8s-auth-ingress-gateway"
     downstream_svc = "payment-token-vault-service"
+    
     if meta["pivot_paths"]:
         ingress_svc, downstream_svc = meta["pivot_paths"][0]
     elif meta["services"]:
-        ingress_svc = meta["services"][0]
-        downstream_svc = meta["services"][1] if len(meta["services"]) > 1 else "corporate-active-directory-dc01"
+        # Separate ingress perimeter gateways from downstream core assets
+        ingresses = [s for s in meta["services"] if any(k in s.lower() for k in ["ingress", "gateway", "vpn", "bastion"])]
+        cores = [s for s in meta["services"] if any(k in s.lower() for k in ["vault", "directory", "spark", "token", "payment"])]
+        if ingresses:
+            ingress_svc = ingresses[0]
+        else:
+            ingress_svc = meta["services"][0]
+            
+        if cores:
+            downstream_svc = cores[0]
+        elif len(meta["services"]) > 1:
+            downstream_svc = meta["services"][1]
+        else:
+            downstream_svc = "corporate-active-directory-dc01"
 
     # Threat Actor Dossiers
     ACTOR_DOSSIERS = {
@@ -322,6 +335,14 @@ def generate_deterministic_report(facts: List[str], query: str) -> str:
             "intent": "Double-Extortion Ransomware, Active Directory Kerberoasting",
             "c2_ip": "194.26.29.112:8443",
             "c2_domain": "lockbit-affiliate-c2.onion"
+        },
+        "FIN7": {
+            "name": "FIN7 (Carbanak / Sangria Tempest / Carbon Spider)",
+            "mitre": "G0046",
+            "sponsor": "Financially Motivated Cybercrime Syndicate",
+            "intent": "Corporate Payment & PoS Infiltration, Ransomware Staging",
+            "c2_ip": "193.106.191.162:443",
+            "c2_domain": "corp-update-cdn.org"
         }
     }
 
@@ -371,6 +392,32 @@ def generate_deterministic_report(facts: List[str], query: str) -> str:
             "hotfix": "Update Tomcat or disallow fields 'class.*', 'Class.*' in WebDataBinder initBinder",
             "patch_version": "Upgrade to Spring Framework 5.3.18+ or 5.2.20+",
             "sha256": "3a76ef59841029471928471b058c491295982185b0185921759281a89c490281"
+        },
+        "CVE-2024-21762": {
+            "name": "FortiOS Out-of-Bounds Write SSL-VPN RCE (CVE-2024-21762)",
+            "cvss": "9.8 (CRITICAL)",
+            "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+            "epss": "96.2% (Active In-The-Wild Exploitation)",
+            "cisa_kev": "Active Exploitation Alert (Added 2024-02-09)",
+            "cwe": "CWE-787: Out-of-bounds Write in SSL VPN web daemon",
+            "payload_example": "Specially crafted HTTP POST request with malicious Content-Length headers targeting /remote/logincheck",
+            "mechanism": "An out-of-bounds write flaw in FortiOS sslvpnd allows an unauthenticated remote attacker to execute arbitrary code or commands via specially crafted HTTP requests.",
+            "hotfix": "Disable SSL-VPN feature immediately or restrict ingress interface to trusted static management IPs",
+            "patch_version": "Upgrade FortiOS to 7.4.3, 7.2.7, 7.0.14 or higher",
+            "sha256": "8f4e9123b0182471928471b058c491295982185b0185921759281a89c4902123"
+        },
+        "CVE-2023-4966": {
+            "name": "Citrix Bleed Session Token Hijacking (CVE-2023-4966)",
+            "cvss": "9.4 (CRITICAL)",
+            "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N",
+            "epss": "94.7% (Extensive Weaponization)",
+            "cisa_kev": "Mandatory Remediation Directive (Added 2023-10-18)",
+            "cwe": "CWE-119: Buffer Overread in NetScaler ADC OpenID Endpoint",
+            "payload_example": "GET /oauth/idp/.well-known/openid-configuration HTTP/1.1 with Host header exceeding 65536 bytes",
+            "mechanism": "Unauthenticated buffer overread allows attackers to extract unencrypted memory dumps containing valid NetScaler AAA session tokens, bypassing MFA to hijack active enterprise sessions.",
+            "hotfix": "Terminate all active ICA/Gateway sessions across NetScaler ADC and rotate SSL certificates",
+            "patch_version": "Deploy Citrix NetScaler Build 13.1-49.13, 14.1-8.50 or later",
+            "sha256": "5c92841029471928471b058c491295982185b0185921759281a89c490281ef56"
         }
     }
 

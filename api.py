@@ -20,6 +20,7 @@ from src.repo_evaluator import (
 )
 from src.report_generator import synthesize_technical_report, synthesize_technical_report_stream
 from src.cache_manager import threat_cache
+from src.graph_engine import extract_cyber_entities, fetch_precision_threat_graph
 
 load_dotenv()
 
@@ -139,73 +140,14 @@ def query_threat_graph(request: QueryRequest):
     """Executes multi-hop attack path traversal and Gemini-grounded threat report synthesis."""
     t0 = time.time()
     
-    # 1. Fast Entity Extraction
-    known_entities = [
-        "APT29", "Nobelium", "Cozy Bear", "Midnight Blizzard",
-        "Lazarus Group", "Lazarus", "HIDDEN COBRA", "Diamond Sleet",
-        "Volt Typhoon", "BRONZE SILHOUETTE", "Vanguard Panda",
-        "LockBit 3.0", "LockBit", "FIN7", "Carbanak",
-        "CVE-2021-44228", "Log4Shell", "CVE-2024-3094", "XZ Utils", "XZ Backdoor",
-        "CVE-2022-22965", "Spring4Shell", "CVE-2024-21762", "FortiOS",
-        "CVE-2023-4966", "Citrix Bleed", "NetScaler",
-        "k8s-auth-ingress-gateway", "payment-token-vault-service", "corporate-active-directory-dc01",
-        "enterprise-bastion-ssh-host", "data-analytics-dataproc-spark", "edge-vpn-gateway-fortigate",
-        "Customer-Auth-Service", "Payment-Processing-Gateway", "Enterprise-SSH-Bastion", "Analytics-ETL-Pipeline",
-        "Exploit Public-Facing Application", "Supply Chain Compromise", "Command and Scripting Interpreter", "Valid Accounts",
-        "Remote Services", "Server Software Component", "Data Encrypted for Impact",
-        "log4j", "xz-utils", "spring-beans", "fortios", "netscaler"
-    ]
-    matched = [e for e in known_entities if e.lower() in request.query.lower()]
-    entities = matched if matched else [request.query.strip()]
+    # 1. High-Precision Entity Extraction
+    entities = extract_cyber_entities(request.query, client=client)
     
-    # 2. Graph Traversal (Accelerated by Neo4j Full-Text Schema Index)
+    # 2. Precision Multi-Hop Graph Traversal
     t_trav_start = time.time()
-    facts = []
-    with driver.session() as session:
-        for entity in entities:
-            clean_e = entity.strip()
-            indexed_found = False
-            
-            # Full-Text Schema Index lookup (<5ms)
-            try:
-                search_term = f'"{clean_e}"' if " " in clean_e else f"{clean_e}*"
-                cypher_idx = """
-                CALL db.index.fulltext.queryNodes("threatEntityIndex", $term) YIELD node, score
-                WHERE score >= 0.4
-                WITH node LIMIT 3
-                MATCH path = (node)-[r*1..2]-(target)
-                UNWIND relationships(path) as rel
-                WITH DISTINCT rel, startNode(rel) as s, endNode(rel) as t
-                RETURN s.name AS src, labels(s)[0] AS s_label, type(rel) AS rel_type, t.name AS tgt, labels(t)[0] AS t_label
-                LIMIT 25
-                """
-                results = list(session.run(cypher_idx, term=search_term))
-                if results:
-                    indexed_found = True
-                    for record in results:
-                        fact = f"- [{record['s_label']}] `{record['src']}` ──[{record['rel_type']}]──► [{record['t_label']}] `{record['tgt']}`"
-                        if fact not in facts:
-                            facts.append(fact)
-            except Exception:
-                indexed_found = False
-
-            # Substring fallback
-            if not indexed_found:
-                cypher_sub = """
-                MATCH (source)
-                WHERE toLower(source.name) CONTAINS toLower($entity)
-                MATCH path = (source)-[r*1..2]-(target)
-                UNWIND relationships(path) as rel
-                WITH DISTINCT rel, startNode(rel) as s, endNode(rel) as t
-                RETURN s.name AS src, labels(s)[0] AS s_label, type(rel) AS rel_type, t.name AS tgt, labels(t)[0] AS t_label
-                LIMIT 25
-                """
-                for record in session.run(cypher_sub, entity=clean_e):
-                    fact = f"- [{record['s_label']}] `{record['src']}` ──[{record['rel_type']}]──► [{record['t_label']}] `{record['tgt']}`"
-                    if fact not in facts:
-                        facts.append(fact)
-                        
+    facts, nodes_dict, edges_list, nodes_meta, metrics = fetch_precision_threat_graph(driver, entities)
     traversal_time = round(time.time() - t_trav_start, 4)
+    
     cached_check = threat_cache.get(request.query, facts)
     is_cached = cached_check is not None
     
