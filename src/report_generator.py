@@ -161,7 +161,7 @@ Create a detailed Markdown Table:
 """
 
     if client:
-        for model_id in ["gemini-3.8-flash", "gemini-3.5-flash-lite"]:
+        for model_id in ["gemini-3.5-flash-lite", "gemini-3.8-flash"]:
             try:
                 from google.genai import types
                 resp = client.models.generate_content(
@@ -243,7 +243,7 @@ OUTPUT STRUCTURE:
     stream_ok = False
 
     if client:
-        for model_id in ["gemini-3.8-flash", "gemini-3.5-flash-lite"]:
+        for model_id in ["gemini-3.5-flash-lite", "gemini-3.8-flash"]:
             try:
                 from google.genai import types
                 stream_resp = client.models.generate_content_stream(
@@ -650,7 +650,7 @@ STRICT OPERATIONAL DIRECTIVES:
 
     stream_ok = False
     if client:
-        for model_id in ["gemini-3.8-flash", "gemini-3.5-flash-lite"]:
+        for model_id in ["gemini-3.5-flash-lite", "gemini-3.8-flash"]:
             try:
                 from google.genai import types
                 stream_resp = client.models.generate_content_stream(

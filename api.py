@@ -10,6 +10,8 @@ from neo4j import GraphDatabase
 from google import genai
 from google.genai import types
 
+from fastapi.middleware.cors import CORSMiddleware
+
 from src.repo_evaluator import (
     parse_github_url,
     fetch_repo_manifest,
@@ -21,7 +23,8 @@ from src.repo_evaluator import (
 from src.report_generator import (
     synthesize_technical_report,
     synthesize_technical_report_stream,
-    synthesize_copilot_followup
+    synthesize_copilot_followup,
+    synthesize_copilot_followup_stream
 )
 from src.cache_manager import threat_cache
 from src.graph_engine import (
@@ -38,6 +41,14 @@ app = FastAPI(
     title="ThreatGraphRAG API",
     description="Enterprise Cyber Threat Intelligence & Multi-Hop Attack Path Reasoning Service",
     version="1.0.0"
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Credentials
@@ -389,6 +400,26 @@ def chat_with_attack_graph(request: CopilotChatRequest):
         reply=reply,
         latency_seconds=round(time.time() - t0, 3)
     )
+
+@app.post("/api/threat-query/chat/stream", tags=["Forensics & Copilot"])
+def chat_with_attack_graph_stream(request: CopilotChatRequest):
+    """
+    Streaming multi-turn SOC Forensics Copilot endpoint.
+    Streams token-by-token forensic responses grounded in the Neo4j graph facts and advisory.
+    """
+    hist = [{"role": m.role, "content": m.content} for m in request.chat_history]
+    def event_stream():
+        for chunk in synthesize_copilot_followup_stream(
+            chat_history=hist,
+            user_question=request.question,
+            facts=request.facts,
+            base_report=request.base_report or "",
+            client=client
+        ):
+            yield f"data: {json.dumps({'text': chunk})}\n\n"
+        yield f"data: {json.dumps({'done': True})}\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 @app.get("/api/cache/stats", tags=["System"])
 def get_cache_statistics():

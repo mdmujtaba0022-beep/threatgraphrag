@@ -1137,10 +1137,414 @@ div[data-testid="stMarkdownContainer"] h3 {
   margin-top: 10px !important;
   margin-bottom: 6px !important;
 }
+/* =========================================================
+   FLOATING RESIZABLE COPILOT DRAWER STYLES
+   ========================================================= */
+#copilot-floating-launcher {
+  position: fixed !important;
+  right: 24px !important;
+  bottom: 24px !important;
+  z-index: 2147483640 !important;
+  background: #0B1120 !important;
+  color: #F8FAFC !important;
+  border: 1px solid #38BDF8 !important;
+  border-radius: 24px !important;
+  padding: 8px 16px !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.65), 0 0 14px rgba(56, 189, 248, 0.35) !important;
+  cursor: pointer !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.5px !important;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  user-select: none !important;
+}
+
+#copilot-floating-launcher:hover {
+  background: #0284C7 !important;
+  border-color: #7DD3FC !important;
+  transform: translateY(-2px) scale(1.04) !important;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.75), 0 0 18px rgba(56, 189, 248, 0.6) !important;
+}
+
+#copilot-floating-launcher.copilot-hidden {
+  display: none !important;
+}
+
+.copilot-pulse-dot {
+  width: 7px !important;
+  height: 7px !important;
+  background: #10B981 !important;
+  border-radius: 50% !important;
+  box-shadow: 0 0 8px #10B981 !important;
+  animation: copilotPulse 2s infinite !important;
+}
+
+@keyframes copilotPulse {
+  0% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.85); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+#copilot-flyout-drawer {
+  position: fixed !important;
+  top: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 480px !important;
+  min-width: 320px !important;
+  max-width: 95vw !important;
+  height: 100vh !important;
+  z-index: 2147483646 !important;
+  background: #070B14 !important;
+  border-left: 1px solid #1E293B !important;
+  box-shadow: -12px 0 50px rgba(0, 0, 0, 0.85) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  transform: translateX(100%) !important;
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  box-sizing: border-box !important;
+  font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+}
+
+#copilot-flyout-drawer.copilot-open {
+  transform: translateX(0) !important;
+}
+
+#copilot-flyout-drawer.copilot-resizing {
+  transition: none !important;
+}
+
+#copilot-resizer {
+  position: absolute !important;
+  left: -8px !important;
+  top: 0 !important;
+  bottom: 0 !important;
+  width: 16px !important;
+  cursor: ew-resize !important;
+  z-index: 50 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: transparent !important;
+}
+
+#copilot-resizer:hover,
+#copilot-resizer.resizing {
+  background: rgba(56, 189, 248, 0.15) !important;
+}
+
+.copilot-resizer-line {
+  width: 3px !important;
+  height: 48px !important;
+  border-radius: 2px !important;
+  background: #334155 !important;
+  transition: all 0.15s ease !important;
+}
+
+#copilot-resizer:hover .copilot-resizer-line,
+#copilot-resizer.resizing .copilot-resizer-line {
+  background: #38BDF8 !important;
+  height: 72px !important;
+  box-shadow: 0 0 10px #38BDF8 !important;
+}
+
+.copilot-header {
+  height: 52px !important;
+  padding: 0 14px !important;
+  background: #0B1120 !important;
+  border-bottom: 1px solid #1E293B !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  flex-shrink: 0 !important;
+}
+
+.copilot-hdr-title {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  color: #F8FAFC !important;
+  letter-spacing: 0.5px !important;
+}
+
+.copilot-badge {
+  font-size: 9px !important;
+  font-weight: 700 !important;
+  background: rgba(14, 165, 233, 0.15) !important;
+  color: #38BDF8 !important;
+  border: 1px solid rgba(14, 165, 233, 0.35) !important;
+  padding: 1px 6px !important;
+  border-radius: 4px !important;
+  letter-spacing: 0.5px !important;
+}
+
+.copilot-actions {
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+}
+
+.copilot-btn {
+  background: #1E293B !important;
+  color: #94A3B8 !important;
+  border: 1px solid #334155 !important;
+  border-radius: 4px !important;
+  width: 28px !important;
+  height: 28px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  transition: all 0.15s ease !important;
+}
+
+.copilot-btn:hover {
+  background: #3B82F6 !important;
+  color: #FFFFFF !important;
+  border-color: #60A5FA !important;
+}
+
+.copilot-context-bar {
+  padding: 7px 14px !important;
+  background: rgba(14, 165, 233, 0.06) !important;
+  border-bottom: 1px solid rgba(14, 165, 233, 0.15) !important;
+  font-size: 11px !important;
+  color: #94A3B8 !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  flex-shrink: 0 !important;
+  word-break: break-word !important;
+}
+
+.copilot-prompts {
+  padding: 8px 12px !important;
+  border-bottom: 1px solid #1E293B !important;
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 6px !important;
+  background: #090D1A !important;
+  flex-shrink: 0 !important;
+}
+
+.copilot-chip {
+  background: #131C2E !important;
+  border: 1px solid #23354E !important;
+  color: #93C5FD !important;
+  font-size: 10px !important;
+  font-weight: 600 !important;
+  padding: 4px 8px !important;
+  border-radius: 4px !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease !important;
+}
+
+.copilot-chip:hover {
+  background: #1E3A8A !important;
+  border-color: #60A5FA !important;
+  color: #FFFFFF !important;
+  transform: translateY(-1px) !important;
+}
+
+.copilot-messages {
+  flex: 1 !important;
+  overflow-y: auto !important;
+  padding: 14px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 12px !important;
+}
+
+.copilot-msg {
+  max-width: 90% !important;
+  padding: 10px 14px !important;
+  border-radius: 8px !important;
+  font-size: 12px !important;
+  line-height: 1.55 !important;
+  word-break: break-word !important;
+}
+
+.copilot-msg.user {
+  align-self: flex-end !important;
+  background: #1E293B !important;
+  border: 1px solid #0284C7 !important;
+  color: #F8FAFC !important;
+  border-bottom-right-radius: 2px !important;
+}
+
+.copilot-msg.assistant {
+  align-self: flex-start !important;
+  background: #0F172A !important;
+  border: 1px solid #1E293B !important;
+  color: #E2E8F0 !important;
+  border-bottom-left-radius: 2px !important;
+}
+
+.copilot-input-area {
+  padding: 10px 14px !important;
+  border-top: 1px solid #1E293B !important;
+  background: #0B1120 !important;
+  flex-shrink: 0 !important;
+}
+
+.copilot-input-box {
+  display: flex !important;
+  gap: 8px !important;
+  align-items: flex-end !important;
+  background: #070B14 !important;
+  border: 1px solid #334155 !important;
+  border-radius: 6px !important;
+  padding: 6px 10px !important;
+}
+
+.copilot-input-box:focus-within {
+  border-color: #38BDF8 !important;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.3) !important;
+}
+
+.copilot-textarea {
+  flex: 1 !important;
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  color: #F8FAFC !important;
+  font-family: inherit !important;
+  font-size: 12px !important;
+  resize: none !important;
+  max-height: 120px !important;
+  line-height: 1.4 !important;
+}
+
+.copilot-send-btn {
+  background: #0284C7 !important;
+  border: none !important;
+  color: #FFFFFF !important;
+  width: 28px !important;
+  height: 28px !important;
+  border-radius: 4px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  flex-shrink: 0 !important;
+  transition: background 0.15s ease !important;
+}
+
+.copilot-send-btn:hover {
+  background: #0369A1 !important;
+}
+
+.copilot-footer-meta {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  margin-top: 6px !important;
+  font-size: 10px !important;
+  color: #64748B !important;
+}
+
+.copilot-clear-link {
+  color: #94A3B8 !important;
+  cursor: pointer !important;
+  text-decoration: underline !important;
+}
+
+.copilot-clear-link:hover {
+  color: #F87171 !important;
+}
+
+.copilot-code-block {
+  background: #020617 !important;
+  border: 1px solid #1E293B !important;
+  border-radius: 5px !important;
+  margin: 6px 0 !important;
+  overflow: hidden !important;
+}
+
+.copilot-code-hdr {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  background: #0F172A !important;
+  padding: 3px 8px !important;
+  font-size: 9px !important;
+  font-weight: 700 !important;
+  color: #94A3B8 !important;
+  border-bottom: 1px solid #1E293B !important;
+}
+
+.copilot-copy-btn {
+  background: transparent !important;
+  border: 1px solid #334155 !important;
+  color: #CBD5E1 !important;
+  font-size: 9px !important;
+  padding: 1px 5px !important;
+  border-radius: 3px !important;
+  cursor: pointer !important;
+}
+
+.copilot-copy-btn:hover {
+  background: #2563EB !important;
+  color: #FFF !important;
+}
+
+.copilot-code-block pre {
+  margin: 0 !important;
+  padding: 8px 10px !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+  font-size: 11px !important;
+  color: #E2E8F0 !important;
+  overflow-x: auto !important;
+}
+
+.copilot-inline-code {
+  background: rgba(0, 0, 0, 0.4) !important;
+  color: #FCA5A5 !important;
+  padding: 1px 4px !important;
+  border-radius: 3px !important;
+  font-family: ui-monospace, monospace !important;
+  font-size: 11px !important;
+}
+
+.copilot-cursor {
+  display: inline-block !important;
+  color: #38BDF8 !important;
+  animation: blink 0.9s infinite !important;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
 </style>
 """, unsafe_allow_html=True)
 
 container_report, container_graph = st.columns([1, 1])
+
+copilot_init_ctx = json.dumps({
+    "has_report": bool(st.session_state.get("answer")),
+    "scenario": st.session_state.get("threat_query", "") or "APT29 Lateral Movement",
+    "facts": st.session_state.get("facts", [])[:15],
+    "answer_snippet": (st.session_state.get("answer", "")[:400] + "...") if st.session_state.get("answer") else ""
+})
+components.html(f"""
+<script>
+try {{
+    if (window.parent) {{
+        window.parent.__COPILOT_CONTEXT__ = {copilot_init_ctx};
+        if (window.parent.updateCopilotContextUI) window.parent.updateCopilotContextUI();
+    }}
+}} catch(e) {{}}
+</script>
+""", height=0)
 
 # Boundary Splitter Script: Allows taking mouse to boundary line to drag/minimize/maximize
 components.html("""
@@ -1298,6 +1702,7 @@ components.html("""
   function handlePageUpdates() {
     setupBoundarySplitter();
     enforceCTISizes();
+    setupFloatingCopilotDrawer();
   }
 
   setTimeout(handlePageUpdates, 200);
@@ -1445,6 +1850,396 @@ components.html("""
       });
     }
   } catch(e) {}
+
+  // --- Floating Resizable Copilot Flyout Drawer Engine ---
+  function setupFloatingCopilotDrawer() {
+    try {
+      const pDoc = window.parent.document;
+      if (!pDoc || !pDoc.body) return;
+
+      // 1. Create or ensure floating launcher button
+      let launcher = pDoc.getElementById('copilot-floating-launcher');
+      if (!launcher) {
+        launcher = pDoc.createElement('div');
+        launcher.id = 'copilot-floating-launcher';
+        launcher.title = 'Open SOC Forensics Copilot (Interactive AI Investigation)';
+        launcher.innerHTML = `
+          <span class="copilot-pulse-dot"></span>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#38BDF8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:middle;">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            <path d="M9 12h6"/>
+            <path d="M12 9v6"/>
+          </svg>
+          <span>COPILOT</span>
+        `;
+        pDoc.body.appendChild(launcher);
+      }
+
+      // 2. Create or ensure flyout drawer
+      let drawer = pDoc.getElementById('copilot-flyout-drawer');
+      if (!drawer) {
+        drawer = pDoc.createElement('div');
+        drawer.id = 'copilot-flyout-drawer';
+        drawer.innerHTML = `
+          <div id="copilot-resizer" title="Drag left/right to resize • Double-click to maximize/restore">
+            <div class="copilot-resizer-line"></div>
+          </div>
+          
+          <div class="copilot-header">
+            <div class="copilot-hdr-title">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#38BDF8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                <path d="M9 12h6"/>
+                <path d="M12 9v6"/>
+              </svg>
+              <span>SOC FORENSICS COPILOT</span>
+              <span class="copilot-badge">CYBER GRAPHRAG</span>
+            </div>
+            <div class="copilot-actions">
+              <button class="copilot-btn" id="copilot-minimize-btn" title="Minimize to Launcher (—)">—</button>
+              <button class="copilot-btn" id="copilot-toggle-expand-btn" title="Maximize / Restore Width (⤢)">⤢</button>
+              <button class="copilot-btn" id="copilot-close-btn" title="Close Copilot (Esc)">✕</button>
+            </div>
+          </div>
+
+          <div class="copilot-context-bar" id="copilot-context-bar">
+            <span style="color:#38BDF8; font-weight:700;">●</span>
+            <span id="copilot-context-text" style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">Loading Threat Context...</span>
+          </div>
+
+          <div class="copilot-prompts">
+            <button class="copilot-chip" data-prompt="What specific Windows Security, Sysmon, or Linux audit event IDs detect this pivot?">Event IDs to Detect</button>
+            <button class="copilot-chip" data-prompt="What exact iptables or network firewall rule can we push right now to contain lateral movement?">Emergency Firewall Rule</button>
+            <button class="copilot-chip" data-prompt="What is the operational impact and PCI-DSS compliance blast radius if payment-token-vault is reached?">PCI-DSS Blast Radius</button>
+            <button class="copilot-chip" data-prompt="Summarize this incident into a 3-bullet executive briefing with containment urgency for the CISO.">CISO Executive Briefing</button>
+            <button class="copilot-chip" data-prompt="Map every step in this attack chain to MITRE ATT&CK Enterprise Techniques (IDs and names).">MITRE ATT&CK TTPs</button>
+          </div>
+
+          <div class="copilot-messages" id="copilot-messages">
+            <div class="copilot-msg assistant" id="copilot-welcome-msg">
+              <div style="font-weight:700; color:#38BDF8; margin-bottom:4px; display:flex; align-items:center; gap:6px;">
+                <span>🛡️ SOC Forensics Copilot Ready</span>
+              </div>
+              Ask iterative forensics questions grounded directly in the verified Neo4j attack graph, telemetry event IDs, emergency containment rules, and downstream blast radius.
+            </div>
+          </div>
+
+          <div class="copilot-input-area">
+            <div class="copilot-input-box">
+              <textarea class="copilot-textarea" id="copilot-input" rows="1" placeholder="Ask a follow-up forensics question on this attack path... (Enter to send)"></textarea>
+              <button class="copilot-send-btn" id="copilot-send-btn" title="Send (Enter)">➤</button>
+            </div>
+            <div class="copilot-footer-meta">
+              <span>FastAPI Port 8000 • SSE Stream Active</span>
+              <span class="copilot-clear-link" id="copilot-clear-link">Clear chat</span>
+            </div>
+          </div>
+        `;
+        pDoc.body.appendChild(drawer);
+
+        // Restore saved width from localStorage if present
+        try {
+          const savedW = localStorage.getItem('copilot_drawer_width');
+          if (savedW) {
+            const parsed = parseInt(savedW, 10);
+            if (parsed >= 320) {
+              drawer.style.width = Math.min(parsed, Math.floor(pDoc.documentElement.clientWidth * 0.95)) + 'px';
+            }
+          }
+        } catch(e) {}
+      }
+
+      // Drawer Open / Close / Toggle Functions
+      function openDrawer() {
+        drawer.classList.add('copilot-open');
+        launcher.classList.add('copilot-hidden');
+        updateContextUI();
+        const input = pDoc.getElementById('copilot-input');
+        if (input) setTimeout(() => input.focus(), 150);
+      }
+
+      function closeDrawer() {
+        drawer.classList.remove('copilot-open');
+        launcher.classList.remove('copilot-hidden');
+      }
+
+      function toggleDrawer() {
+        if (drawer.classList.contains('copilot-open')) {
+          closeDrawer();
+        } else {
+          openDrawer();
+        }
+      }
+
+      window.parent.openCopilotDrawer = openDrawer;
+      window.parent.closeCopilotDrawer = closeDrawer;
+      window.parent.toggleCopilotDrawer = toggleDrawer;
+
+      launcher.onclick = openDrawer;
+
+      const closeBtn = pDoc.getElementById('copilot-close-btn');
+      if (closeBtn) closeBtn.onclick = closeDrawer;
+
+      const minBtn = pDoc.getElementById('copilot-minimize-btn');
+      if (minBtn) minBtn.onclick = closeDrawer;
+
+      // Resizing Logic: Mouse Drag on Left Border Handle
+      const resizer = pDoc.getElementById('copilot-resizer');
+      const toggleExpandBtn = pDoc.getElementById('copilot-toggle-expand-btn');
+
+      if (resizer && !resizer.__drag_bound) {
+        resizer.__drag_bound = true;
+        let isResizing = false;
+        let startX = 0;
+        let startW = 0;
+
+        resizer.addEventListener('mousedown', function(e) {
+          isResizing = true;
+          startX = e.clientX;
+          startW = drawer.getBoundingClientRect().width;
+          drawer.classList.add('copilot-resizing');
+          resizer.classList.add('resizing');
+          pDoc.body.style.cursor = 'col-resize';
+          pDoc.body.style.userSelect = 'none';
+          pDoc.querySelectorAll('iframe').forEach(f => f.style.pointerEvents = 'none');
+          e.preventDefault();
+          e.stopPropagation();
+        });
+
+        pDoc.addEventListener('mousemove', function(e) {
+          if (!isResizing) return;
+          const delta = startX - e.clientX; // Moving left increases right-docked drawer width
+          let newW = startW + delta;
+          const maxW = Math.floor(pDoc.documentElement.clientWidth * 0.95);
+          newW = Math.max(320, Math.min(maxW, newW));
+          drawer.style.width = newW + 'px';
+          try {
+            localStorage.setItem('copilot_drawer_width', String(Math.round(newW)));
+          } catch(e) {}
+        });
+
+        pDoc.addEventListener('mouseup', function() {
+          if (isResizing) {
+            isResizing = false;
+            drawer.classList.remove('copilot-resizing');
+            resizer.classList.remove('resizing');
+            pDoc.body.style.cursor = '';
+            pDoc.body.style.userSelect = '';
+            pDoc.querySelectorAll('iframe').forEach(f => f.style.pointerEvents = '');
+          }
+        });
+
+        resizer.addEventListener('dblclick', function() {
+          toggleMaximize();
+        });
+      }
+
+      function toggleMaximize() {
+        const currentW = drawer.getBoundingClientRect().width;
+        const maxW = Math.floor(pDoc.documentElement.clientWidth * 0.82);
+        if (currentW > maxW * 0.65) {
+          drawer.style.width = '480px';
+          try { localStorage.setItem('copilot_drawer_width', '480'); } catch(e) {}
+        } else {
+          drawer.style.width = maxW + 'px';
+          try { localStorage.setItem('copilot_drawer_width', String(maxW)); } catch(e) {}
+        }
+      }
+
+      if (toggleExpandBtn) {
+        toggleExpandBtn.onclick = toggleMaximize;
+      }
+
+      // Context Banner UI updater
+      function updateContextUI() {
+        const ctxText = pDoc.getElementById('copilot-context-text');
+        if (!ctxText) return;
+        const ctx = window.parent.__COPILOT_CONTEXT__;
+        if (ctx && ctx.has_report) {
+          const factCount = (ctx.facts && ctx.facts.length) || 0;
+          ctxText.innerHTML = `<strong>Active Scenario:</strong> <span style="color:#E2E8F0;">${escapeHtml(ctx.scenario || 'Incident Analysis')}</span> (${factCount} graph facts)`;
+          ctxText.title = ctx.scenario || '';
+        } else {
+          ctxText.innerHTML = `<span style="color:#64748B;">No report generated yet — responses query global Neo4j CTI topology.</span>`;
+        }
+      }
+      window.parent.updateCopilotContextUI = updateContextUI;
+      updateContextUI();
+
+      // Chat Message Handling & SSE Stream
+      const messagesBox = pDoc.getElementById('copilot-messages');
+      const inputArea = pDoc.getElementById('copilot-input');
+      const sendBtn = pDoc.getElementById('copilot-send-btn');
+      const clearLink = pDoc.getElementById('copilot-clear-link');
+
+      if (!window.parent.__COPILOT_CHAT_HISTORY__) {
+        window.parent.__COPILOT_CHAT_HISTORY__ = [];
+      }
+
+      function escapeHtml(str) {
+        return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      }
+
+      function formatMarkdown(text) {
+        let raw = escapeHtml(text);
+        raw = raw.replace(/```([a-zA-Z0-9_\-]*)\n([\s\S]*?)```/g, function(match, lang, code) {
+          return `<div class="copilot-code-block">
+            <div class="copilot-code-hdr">
+              <span>${lang || 'CODE'}</span>
+              <button class="copilot-copy-btn" onclick="navigator.clipboard.writeText(this.closest('.copilot-code-block').querySelector('pre').innerText).then(()=>{this.innerText='COPIED'; setTimeout(()=>this.innerText='COPY', 1500);})">COPY</button>
+            </div>
+            <pre>${code.trim()}</pre>
+          </div>`;
+        });
+        raw = raw.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+        raw = raw.replace(/`([^`]+)`/g, '<code class="copilot-inline-code">$1</code>');
+        raw = raw.replace(/^\s*[\-\*]\s+(.*)$/gm, '<li style="margin-left: 16px; margin-bottom: 2px;">$1</li>');
+        raw = raw.replace(/\n\n/g, '<div style="height:6px;"></div>');
+        raw = raw.replace(/\n/g, '<br/>');
+        return raw;
+      }
+
+      function appendMessage(role, content) {
+        const msgDiv = pDoc.createElement('div');
+        msgDiv.className = 'copilot-msg ' + role;
+        if (role === 'assistant') {
+          msgDiv.innerHTML = formatMarkdown(content);
+        } else {
+          msgDiv.textContent = content;
+        }
+        messagesBox.appendChild(msgDiv);
+        messagesBox.scrollTop = messagesBox.scrollHeight;
+        return msgDiv;
+      }
+
+      let isStreaming = false;
+
+      async function sendMessage(text) {
+        if (!text || !text.trim() || isStreaming) return;
+        text = text.trim();
+
+        if (inputArea) {
+          inputArea.value = '';
+          inputArea.style.height = 'auto';
+        }
+
+        appendMessage('user', text);
+        window.parent.__COPILOT_CHAT_HISTORY__.push({ role: 'user', content: text });
+
+        const assistantDiv = pDoc.createElement('div');
+        assistantDiv.className = 'copilot-msg assistant';
+        assistantDiv.innerHTML = '<span class="copilot-cursor">▋</span>';
+        messagesBox.appendChild(assistantDiv);
+        messagesBox.scrollTop = messagesBox.scrollHeight;
+
+        isStreaming = true;
+        let fullReply = '';
+
+        const ctx = window.parent.__COPILOT_CONTEXT__ || {};
+        const requestPayload = {
+          question: text,
+          chat_history: window.parent.__COPILOT_CHAT_HISTORY__.slice(0, -1),
+          facts: ctx.facts || [],
+          base_report: ctx.answer_snippet || ''
+        };
+
+        try {
+          const response = await fetch('http://127.0.0.1:8000/api/threat-query/chat/stream', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestPayload)
+          });
+
+          if (!response.ok) {
+            throw new Error('HTTP ' + response.status + ': ' + response.statusText);
+          }
+
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder('utf-8');
+          let buffer = '';
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop();
+
+            for (const line of lines) {
+              const trimmed = line.trim();
+              if (trimmed.startsWith('data: ')) {
+                try {
+                  const data = JSON.parse(trimmed.slice(6));
+                  if (data.text) {
+                    fullReply += data.text;
+                    assistantDiv.innerHTML = formatMarkdown(fullReply) + ' <span class="copilot-cursor">▋</span>';
+                    messagesBox.scrollTop = messagesBox.scrollHeight;
+                  }
+                  if (data.done) break;
+                } catch(e) {}
+              }
+            }
+          }
+
+          assistantDiv.innerHTML = formatMarkdown(fullReply);
+          window.parent.__COPILOT_CHAT_HISTORY__.push({ role: 'assistant', content: fullReply });
+        } catch (err) {
+          console.error('Copilot Stream error:', err);
+          assistantDiv.innerHTML = `<span style="color:#F87171; font-weight:600;">⚠ Error communicating with Copilot backend:</span><br/><span style="color:#94A3B8; font-size:11px;">${escapeHtml(err.message)}</span><br/><span style="color:#64748B; font-size:10px;">Ensure the FastAPI backend is running on http://127.0.0.1:8000.</span>`;
+        } finally {
+          isStreaming = false;
+          messagesBox.scrollTop = messagesBox.scrollHeight;
+        }
+      }
+
+      if (sendBtn && !sendBtn.__click_bound) {
+        sendBtn.__click_bound = true;
+        sendBtn.onclick = () => sendMessage(inputArea.value);
+      }
+
+      if (inputArea && !inputArea.__key_bound) {
+        inputArea.__key_bound = true;
+        inputArea.addEventListener('keydown', function(e) {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage(inputArea.value);
+          }
+        });
+        inputArea.addEventListener('input', function() {
+          this.style.height = 'auto';
+          this.style.height = Math.min(120, this.scrollHeight) + 'px';
+        });
+      }
+
+      drawer.querySelectorAll('.copilot-chip').forEach(chip => {
+        if (!chip.__click_bound) {
+          chip.__click_bound = true;
+          chip.addEventListener('click', function() {
+            const prompt = this.getAttribute('data-prompt');
+            if (prompt) sendMessage(prompt);
+          });
+        }
+      });
+
+      if (clearLink && !clearLink.__click_bound) {
+        clearLink.__click_bound = true;
+        clearLink.addEventListener('click', function() {
+          window.parent.__COPILOT_CHAT_HISTORY__ = [];
+          const msgs = messagesBox.querySelectorAll('.copilot-msg:not(#copilot-welcome-msg)');
+          msgs.forEach(m => m.remove());
+        });
+      }
+
+      pDoc.addEventListener('keydown', function(e) {
+        if ((e.key === 'Escape' || e.key === 'Esc' || e.keyCode === 27) && drawer.classList.contains('copilot-open')) {
+          closeDrawer();
+        }
+      });
+
+    } catch(err) {
+      console.error('setupFloatingCopilotDrawer error:', err);
+    }
+  }
 })();
 </script>
 """, height=0)
@@ -1587,72 +2382,43 @@ with container_report:
 
                 st.markdown(st.session_state["answer"])
 
-        # Persistent Evidence & Interactive Forensics Copilot
+        # Discovered Attack Graph Paths (Verified Evidence)
         if "answer" in st.session_state and st.session_state.get("facts"):
             with st.expander("Discovered Attack Graph Paths (Verified Evidence)"):
                 for f in st.session_state["facts"]:
                     st.write(f)
 
-            st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
-            with st.expander("SOC Forensics Copilot (Interactive Investigation)", expanded=True):
-                st.markdown("""
-                <div style="font-size: 13px; color: #94A3B8; margin-bottom: 8px;">
-                    Ask iterative forensics questions grounded directly in the verified Neo4j attack graph, telemetry event IDs, emergency containment rules, and downstream blast radius.
+            st.markdown("""
+            <div style="background: rgba(14, 165, 233, 0.07); border: 1px solid rgba(14, 165, 233, 0.25); border-left: 3px solid #0EA5E9; border-radius: 4px; padding: 10px 14px; margin-top: 14px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
+                <div>
+                    <span style="color: #38BDF8; font-weight: 700; font-size: 12px;">● SOC FORENSICS COPILOT ACTIVE</span>
+                    <div style="color: #94A3B8; font-size: 11px; margin-top: 2px;">Ask follow-up questions grounded directly in the active Neo4j graph, event telemetry, containment rules, and downstream blast radius.</div>
                 </div>
-                """, unsafe_allow_html=True)
+                <button onclick="if(window.parent.openCopilotDrawer) window.parent.openCopilotDrawer();" style="background: #0284C7; color: #FFF; border: 1px solid #38BDF8; border-radius: 4px; padding: 6px 14px; font-size: 11px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+                  <span>Open Floating Copilot</span>
+                  <span>➔</span>
+                </button>
+            </div>
+            """, unsafe_allow_html=True)
 
-                if "copilot_chat_history" not in st.session_state:
-                    st.session_state["copilot_chat_history"] = []
-
-                # Quick Investigation Prompts
-                st.markdown("<div style='font-size: 11px; font-weight: 700; color: #38BDF8; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;'>Quick Investigation Prompts:</div>", unsafe_allow_html=True)
-                qp_col1, qp_col2 = st.columns(2)
-                qp_col3, qp_col4 = st.columns(2)
-                
-                quick_query = None
-                with qp_col1:
-                    if st.button("Event IDs to Detect Pivot", use_container_width=True, key="btn_qp_events"):
-                        quick_query = "What specific Windows Security, Sysmon, or Linux audit event IDs detect this pivot?"
-                with qp_col2:
-                    if st.button("Emergency Firewall Rule", use_container_width=True, key="btn_qp_firewall"):
-                        quick_query = "What exact iptables or network firewall rule can we push right now to contain lateral movement?"
-                with qp_col3:
-                    if st.button("Vault & PCI-DSS Blast Radius", use_container_width=True, key="btn_qp_blast"):
-                        quick_query = "What is the operational impact and PCI-DSS compliance blast radius if payment-token-vault is reached?"
-                with qp_col4:
-                    if st.button("CISO Executive Briefing", use_container_width=True, key="btn_qp_ciso"):
-                        quick_query = "Summarize this incident into a 3-bullet executive briefing with containment urgency for the CISO."
-
-                # Render Previous Conversation Thread
-                for msg in st.session_state["copilot_chat_history"]:
-                    with st.chat_message(msg["role"], avatar="user" if msg["role"] == "user" else "assistant"):
-                        st.markdown(msg["content"])
-
-                # Chat Input Field
-                analyst_input = st.chat_input("Ask a follow-up forensics question on this attack path...", key="copilot_chat_input")
-                active_question = quick_query or analyst_input
-
-                if active_question:
-                    st.session_state["copilot_chat_history"].append({"role": "user", "content": active_question})
-                    with st.chat_message("user", avatar="user"):
-                        st.markdown(active_question)
-                    with st.chat_message("assistant", avatar="assistant"):
-                        stream_gen = synthesize_copilot_followup_stream(
-                            chat_history=st.session_state["copilot_chat_history"][:-1],
-                            user_question=active_question,
-                            facts=st.session_state.get("facts", []),
-                            base_report=st.session_state.get("answer", ""),
-                            client=client
-                        )
-                        reply = st.write_stream(stream_gen)
-                    st.session_state["copilot_chat_history"].append({"role": "assistant", "content": reply})
-
-                if st.session_state["copilot_chat_history"]:
-                    col_clr, _ = st.columns([1, 2])
-                    with col_clr:
-                        if st.button("Clear Conversation History", key="btn_clear_copilot_chat"):
-                            st.session_state["copilot_chat_history"] = []
-                            st.rerun()
+            copilot_ctx = json.dumps({
+                "has_report": True,
+                "scenario": st.session_state.get("threat_query", "") or user_query,
+                "facts": st.session_state.get("facts", [])[:15],
+                "answer_snippet": (st.session_state.get("answer", "")[:400] + "...")
+            })
+            components.html(f"""
+            <script>
+            try {{
+                if (window.parent) {{
+                    window.parent.__COPILOT_CONTEXT__ = {copilot_ctx};
+                    if (window.parent.updateCopilotContextUI) {{
+                        window.parent.updateCopilotContextUI();
+                    }}
+                }}
+            }} catch(e) {{}}
+            </script>
+            """, height=0)
 
     with tab_sbom:
         st.markdown("#### Software Supply Chain & Vulnerability Auditor")
