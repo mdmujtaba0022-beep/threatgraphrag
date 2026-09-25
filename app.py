@@ -34,18 +34,19 @@ if "src.cache_manager" in sys.modules:
         pass
 
 try:
-    from src.report_generator import synthesize_technical_report, synthesize_technical_report_stream
+    from src.report_generator import (
+        synthesize_technical_report,
+        synthesize_technical_report_stream,
+        synthesize_copilot_followup_stream,
+        synthesize_copilot_followup
+    )
 except ImportError:
     import src.report_generator as _rg
     importlib.reload(_rg)
     synthesize_technical_report = getattr(_rg, "synthesize_technical_report")
-    if hasattr(_rg, "synthesize_technical_report_stream"):
-        synthesize_technical_report_stream = getattr(_rg, "synthesize_technical_report_stream")
-    else:
-        def synthesize_technical_report_stream(facts, query, client=None):
-            full = synthesize_technical_report(facts, query, client=client)
-            for line in full.splitlines(keepends=True):
-                yield line
+    synthesize_technical_report_stream = getattr(_rg, "synthesize_technical_report_stream")
+    synthesize_copilot_followup_stream = getattr(_rg, "synthesize_copilot_followup_stream")
+    synthesize_copilot_followup = getattr(_rg, "synthesize_copilot_followup")
 
 from src.cache_manager import threat_cache
 
@@ -1531,9 +1532,72 @@ with container_report:
 
                 st.markdown(st.session_state["answer"])
 
-                with st.expander("🔍 Discovered Attack Graph Paths (Evidence)"):
-                    for f in st.session_state["facts"]:
-                        st.write(f)
+        # Persistent Evidence & Interactive Forensics Copilot
+        if "answer" in st.session_state and st.session_state.get("facts"):
+            with st.expander("🔍 Discovered Attack Graph Paths (Verified Evidence)"):
+                for f in st.session_state["facts"]:
+                    st.write(f)
+
+            st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
+            with st.expander("💬 SOC Forensics Copilot (Interactive Attack Graph Q&A)", expanded=True):
+                st.markdown("""
+                <div style="font-size: 13px; color: #94A3B8; margin-bottom: 8px;">
+                    Ask iterative forensics questions grounded directly in the verified Neo4j attack graph, telemetry event IDs, emergency containment rules, and downstream blast radius.
+                </div>
+                """, unsafe_allow_html=True)
+
+                if "copilot_chat_history" not in st.session_state:
+                    st.session_state["copilot_chat_history"] = []
+
+                # Quick Investigation Prompts
+                st.markdown("<div style='font-size: 11px; font-weight: 700; color: #38BDF8; margin-bottom: 6px;'>⚡ QUICK SOC INVESTIGATION PROMPTS:</div>", unsafe_allow_html=True)
+                qp_col1, qp_col2 = st.columns(2)
+                qp_col3, qp_col4 = st.columns(2)
+                
+                quick_query = None
+                with qp_col1:
+                    if st.button("🔍 Event IDs to Detect Pivot", use_container_width=True, key="btn_qp_events"):
+                        quick_query = "What specific Windows Security, Sysmon, or Linux audit event IDs detect this pivot?"
+                with qp_col2:
+                    if st.button("🛡️ Emergency Ingress Firewall Rule", use_container_width=True, key="btn_qp_firewall"):
+                        quick_query = "What exact iptables or network firewall rule can we push right now to contain lateral movement?"
+                with qp_col3:
+                    if st.button("💥 Vault & PCI-DSS Blast Radius", use_container_width=True, key="btn_qp_blast"):
+                        quick_query = "What is the operational impact and PCI-DSS compliance blast radius if payment-token-vault is reached?"
+                with qp_col4:
+                    if st.button("📋 CISO Executive Briefing", use_container_width=True, key="btn_qp_ciso"):
+                        quick_query = "Summarize this incident into a 3-bullet executive briefing with containment urgency for the CISO."
+
+                # Render Previous Conversation Thread
+                for msg in st.session_state["copilot_chat_history"]:
+                    with st.chat_message(msg["role"], avatar="🕵️" if msg["role"] == "user" else "🛡️"):
+                        st.markdown(msg["content"])
+
+                # Chat Input Field
+                analyst_input = st.chat_input("Ask a follow-up forensics question on this attack path...", key="copilot_chat_input")
+                active_question = quick_query or analyst_input
+
+                if active_question:
+                    st.session_state["copilot_chat_history"].append({"role": "user", "content": active_question})
+                    with st.chat_message("user", avatar="🕵️"):
+                        st.markdown(active_question)
+                    with st.chat_message("assistant", avatar="🛡️"):
+                        stream_gen = synthesize_copilot_followup_stream(
+                            chat_history=st.session_state["copilot_chat_history"][:-1],
+                            user_question=active_question,
+                            facts=st.session_state.get("facts", []),
+                            base_report=st.session_state.get("answer", ""),
+                            client=client
+                        )
+                        reply = st.write_stream(stream_gen)
+                    st.session_state["copilot_chat_history"].append({"role": "assistant", "content": reply})
+
+                if st.session_state["copilot_chat_history"]:
+                    col_clr, _ = st.columns([1, 2])
+                    with col_clr:
+                        if st.button("🧹 Clear Conversation History", key="btn_clear_copilot_chat"):
+                            st.session_state["copilot_chat_history"] = []
+                            st.rerun()
 
     with tab_sbom:
         st.markdown("#### 📦 Software Supply Chain & Vulnerability Auditor")

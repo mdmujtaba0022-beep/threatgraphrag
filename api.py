@@ -18,7 +18,11 @@ from src.repo_evaluator import (
     generate_ai_repo_audit_report,
     PRESET_REPOSITORIES
 )
-from src.report_generator import synthesize_technical_report, synthesize_technical_report_stream
+from src.report_generator import (
+    synthesize_technical_report,
+    synthesize_technical_report_stream,
+    synthesize_copilot_followup
+)
 from src.cache_manager import threat_cache
 from src.graph_engine import extract_cyber_entities, fetch_precision_threat_graph, simulate_countermeasure
 
@@ -76,6 +80,21 @@ class CountermeasureResponse(BaseModel):
     sigma_rule: str
     kubernetes_policy: str
     quarantine_script: str
+
+class ChatMessage(BaseModel):
+    role: str = Field(..., example="user")
+    content: str = Field(..., example="What specific Windows Event ID detects this pivot?")
+
+class CopilotChatRequest(BaseModel):
+    question: str = Field(..., example="What specific Windows Event ID detects this pivot?")
+    chat_history: List[ChatMessage] = Field(default=[], description="Previous conversation turns")
+    facts: List[str] = Field(default=[], description="Verified Neo4j attack graph facts")
+    base_report: Optional[str] = Field("", description="Baseline CTI advisory report context")
+
+class CopilotChatResponse(BaseModel):
+    question: str
+    reply: str
+    latency_seconds: float
 
 # Endpoints
 @app.get("/health", tags=["System"])
@@ -265,6 +284,27 @@ def query_threat_graph_stream(request: QueryRequest):
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+@app.post("/api/threat-query/chat", response_model=CopilotChatResponse, tags=["Forensics & Copilot"])
+def chat_with_attack_graph(request: CopilotChatRequest):
+    """
+    Multi-turn SOC Forensics Copilot endpoint.
+    Answers iterative investigation questions grounded in the active Neo4j graph facts and incident advisory.
+    """
+    t0 = time.time()
+    hist = [{"role": m.role, "content": m.content} for m in request.chat_history]
+    reply = synthesize_copilot_followup(
+        chat_history=hist,
+        user_question=request.question,
+        facts=request.facts,
+        base_report=request.base_report or "",
+        client=client
+    )
+    return CopilotChatResponse(
+        question=request.question,
+        reply=reply,
+        latency_seconds=round(time.time() - t0, 3)
+    )
 
 @app.get("/api/cache/stats", tags=["System"])
 def get_cache_statistics():
