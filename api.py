@@ -3,7 +3,7 @@ import time
 import json
 from typing import List, Dict, Any, Optional
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, HTMLResponse, RedirectResponse
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 from neo4j import GraphDatabase
@@ -102,6 +102,64 @@ class CopilotChatResponse(BaseModel):
     latency_seconds: float
 
 # Endpoints
+@app.get("/", response_class=HTMLResponse, include_in_schema=False)
+def root_dashboard():
+    """Interactive Gateway Dashboard with 1-click links to Swagger UI and documentation."""
+    return """<!DOCTYPE html>
+<html>
+<head>
+    <title>ThreatGraphRAG API Gateway</title>
+    <meta http-equiv="refresh" content="2;url=/docs" />
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace; background: #0B1120; color: #E2E8F0; padding: 40px; margin: 0; }
+        .card { max-width: 760px; margin: 40px auto; background: #1E293B; border: 1px solid #334155; border-radius: 12px; padding: 32px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+        h1 { color: #38BDF8; font-size: 24px; margin-top: 0; }
+        p { color: #94A3B8; font-size: 15px; line-height: 1.6; }
+        .btn { display: inline-block; background: #0284C7; color: white; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-weight: 600; margin-right: 10px; margin-top: 10px; }
+        .btn:hover { background: #0369A1; }
+        .btn-outline { background: transparent; border: 1px solid #475569; color: #CBD5E1; }
+        .btn-outline:hover { background: #334155; }
+        .badge { background: rgba(16, 185, 129, 0.15); color: #34D399; padding: 4px 10px; border-radius: 20px; font-size: 12px; border: 1px solid rgba(16, 185, 129, 0.3); }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 24px; }
+        .item { background: #0F172A; padding: 14px; border-radius: 8px; border: 1px solid #1E293B; font-size: 13px; }
+        .item b { color: #F8FAFC; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <h1>🛡️ ThreatGraphRAG REST API</h1>
+            <span class="badge">● ONLINE (HTTP 200)</span>
+        </div>
+        <p>Enterprise Cyber Threat Intelligence, Graph-Theoretic Chokepoint Engine, and Multi-Hop Attack Path Reasoning Service.</p>
+        <div style="margin-top: 20px;">
+            <a href="/docs" class="btn">🚀 Open Swagger Interactive Docs (/docs)</a>
+            <a href="/redoc" class="btn btn-outline">📚 ReDoc API Spec</a>
+            <a href="/health" class="btn btn-outline">💓 Health Check</a>
+        </div>
+        <div class="grid">
+            <div class="item">
+                <b>🎯 Chokepoint Analysis</b><br/>
+                <code style="color:#F59E0B;">POST /api/graph/chokepoint-analysis</code>
+            </div>
+            <div class="item">
+                <b>🛡️ Defense Simulator</b><br/>
+                <code style="color:#10B981;">POST /api/countermeasure/simulate</code>
+            </div>
+            <div class="item">
+                <b>💬 SOC Forensics Copilot</b><br/>
+                <code style="color:#818CF8;">POST /api/threat-query/chat</code>
+            </div>
+            <div class="item">
+                <b>🌐 Threat Subgraph</b><br/>
+                <code style="color:#38BDF8;">POST /api/threat-query</code>
+            </div>
+        </div>
+        <p style="font-size: 12px; color: #64748B; margin-top: 24px;">Auto-redirecting to <code>/docs</code> in 2 seconds...</p>
+    </div>
+</body>
+</html>"""
+
 @app.get("/health", tags=["System"])
 def health_check():
     """Verifies API, Neo4j, and Gemini connection status."""
