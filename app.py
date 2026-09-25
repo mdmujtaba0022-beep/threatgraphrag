@@ -33,6 +33,12 @@ if "src.cache_manager" in sys.modules:
     except Exception:
         pass
 
+if "src.graph_engine" in sys.modules:
+    try:
+        importlib.reload(sys.modules["src.graph_engine"])
+    except Exception:
+        pass
+
 try:
     from src.report_generator import (
         synthesize_technical_report,
@@ -90,13 +96,22 @@ with st.sidebar:
         st.rerun()
     st.markdown("---")
 
-from src.graph_engine import (
-    extract_cyber_entities,
-    fetch_precision_threat_graph,
-    calculate_graph_threat_metrics,
-    simulate_countermeasure,
-    compute_graph_chokepoints
-)
+try:
+    from src.graph_engine import (
+        extract_cyber_entities,
+        fetch_precision_threat_graph,
+        calculate_graph_threat_metrics,
+        simulate_countermeasure,
+        compute_graph_chokepoints
+    )
+except ImportError:
+    import src.graph_engine as _ge
+    importlib.reload(_ge)
+    extract_cyber_entities = getattr(_ge, "extract_cyber_entities")
+    fetch_precision_threat_graph = getattr(_ge, "fetch_precision_threat_graph")
+    calculate_graph_threat_metrics = getattr(_ge, "calculate_graph_threat_metrics")
+    simulate_countermeasure = getattr(_ge, "simulate_countermeasure")
+    compute_graph_chokepoints = getattr(_ge, "compute_graph_chokepoints")
 
 # Schemas
 class QueryEntities(BaseModel):
