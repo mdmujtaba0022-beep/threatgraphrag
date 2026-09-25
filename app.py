@@ -230,22 +230,29 @@ def render_attack_graph(nodes_dict, edges, nodes_meta=None, graph_height=720, ch
         if nodes_meta and name in nodes_meta:
             props = nodes_meta[name].get("props", {})
             
-        level = get_node_level(label, name, props)
+        base_label = label.split("(")[0].strip() if "(" in label else label
+        status_suffix = ""
+        if "(MITIGATED)" in label:
+            status_suffix = "\n[MITIGATED]"
+        elif "(QUARANTINED)" in label:
+            status_suffix = "\n[QUARANTINED]"
+
+        level = get_node_level(base_label, name, props)
         
-        lookup_label = label
-        if label == "EnterpriseService" and level == 6:
+        lookup_label = base_label
+        if base_label == "EnterpriseService" and level == 6:
             lookup_label = "EnterpriseService_Core"
             
         style = theme.get(lookup_label, {
             "bg": "#0F172A", "border": "#64748B", "highlight": "#475569",
-            "badge": label
+            "badge": base_label
         })
         
-        if label == "ThreatActor":
+        if base_label == "ThreatActor":
             primary = name.split("(")[0].strip()
             tier = props.get("tier", "State-Sponsored APT")
             display_label = f"[{style['badge'].upper()}]\n{primary}\n{tier}"
-        elif label == "Vulnerability":
+        elif base_label == "Vulnerability":
             cve_id = name.split("(")[0].strip()
             cve_alias = name.split("(")[1].replace(")", "").strip() if "(" in name else ""
             cvss = props.get("cvss", "10.0")
@@ -255,13 +262,13 @@ def render_attack_graph(nodes_dict, edges, nodes_meta=None, graph_height=720, ch
             if cve_alias:
                 display_label += f"\n({cve_alias})"
             display_label += f"\n{metric_str}"
-        elif label == "EnterpriseService":
+        elif base_label == "EnterpriseService":
             cloud = props.get("cloud", "")
             cloud_short = cloud.split(" ")[0] if cloud else ""
             display_label = f"[{style['badge'].upper()}]\n{name}"
             if cloud_short:
                 display_label += f"\n[{cloud_short}]"
-        elif label == "AttackTechnique":
+        elif base_label == "AttackTechnique":
             t_id = props.get("id", "")
             tactic = props.get("tactic", "")
             clean_name = name[:22] + "..." if len(name) > 22 else name
@@ -269,7 +276,7 @@ def render_attack_graph(nodes_dict, edges, nodes_meta=None, graph_height=720, ch
             display_label = f"[{badge_txt}]\n{clean_name}"
             if tactic:
                 display_label += f"\n<{tactic}>"
-        elif label == "SoftwarePackage":
+        elif base_label == "SoftwarePackage":
             parts = name.split(":")
             if len(parts) >= 3:
                 pkg_show = f"{parts[1]} v{parts[2]}"
@@ -278,25 +285,35 @@ def render_attack_graph(nodes_dict, edges, nodes_meta=None, graph_height=720, ch
             else:
                 pkg_show = name
             display_label = f"[{style['badge'].upper()}]\n{pkg_show}"
-        elif label == "RemediationPatch":
+        elif base_label == "RemediationPatch":
             clean_p = name.split("(")[0].strip()[:24]
             bulletin = props.get("bulletin", "").split("/")[0].strip()
             display_label = f"[{style['badge'].upper()}]\n{clean_p}"
             if bulletin:
                 display_label += f"\n{bulletin[:22]}"
-        elif label == "GitHubRepo":
+        elif base_label == "GitHubRepo":
             clean_r = name.replace("Repo: ", "").strip()
             display_label = f"[{style['badge'].upper()}]\n{clean_r}"
         else:
             clean_n = name[:26] + "..." if len(name) > 26 else name
             display_label = f"[{style['badge'].upper()}]\n{clean_n}"
             
+        if status_suffix:
+            display_label += status_suffix
+
         is_chokepoint = bool(chokepoint_node and (chokepoint_node.lower() == name.lower() or chokepoint_node.lower() in name.lower()))
         if is_chokepoint:
             display_label = f"[CHOKEPOINT • ARTICULATION]\n" + display_label
 
         node_bg = "#78350F" if is_chokepoint else style["bg"]
         node_border = "#F59E0B" if is_chokepoint else style["border"]
+        if "(MITIGATED)" in label:
+            node_bg = "#064E3B"
+            node_border = "#10B981"
+        elif "(QUARANTINED)" in label:
+            node_bg = "#78350F"
+            node_border = "#F59E0B"
+            
         node_highlight_bg = "#92400E" if is_chokepoint else style["highlight"]
         node_highlight_border = "#FBBF24" if is_chokepoint else "#FFFFFF"
         node_border_width = 4 if is_chokepoint else 2
@@ -347,7 +364,7 @@ def render_attack_graph(nodes_dict, edges, nodes_meta=None, graph_height=720, ch
             "id": name,
             "label": label,
             "badge": style["badge"],
-            "icon": style["icon"],
+            "icon": style.get("icon", ""),
             "level": level,
             "props": props
         }
