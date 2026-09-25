@@ -57,10 +57,20 @@ except ImportError:
 from src.cache_manager import threat_cache
 
 # Page config
-st.set_page_config(page_title="ThreatGraphRAG | Cyber Threat Intelligence", layout="wide", page_icon="🛡️")
+st.set_page_config(page_title="ThreatGraphRAG | Cyber Threat Intelligence", layout="wide", page_icon="shield")
 
-st.title("🛡️ ThreatGraphRAG: Cyber Threat Intelligence & Attack Path Engine")
-st.caption("Automated Multi-Hop Attack Graph Reasoning & Supply Chain Blast Radius Analysis")
+st.markdown("""
+<div style="margin-bottom: 20px; padding-bottom: 12px; border-bottom: 1px solid #1E293B;">
+    <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+        <h1 style="margin: 0; font-size: 26px; font-weight: 700; color: #F8FAFC; letter-spacing: -0.5px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">ThreatGraphRAG</h1>
+        <span style="background: rgba(2, 132, 199, 0.15); color: #38BDF8; border: 1px solid rgba(2, 132, 199, 0.4); font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.5px;">Enterprise CTI</span>
+        <span style="background: rgba(16, 185, 129, 0.15); color: #34D399; border: 1px solid rgba(16, 185, 129, 0.4); font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.5px;">Active Graph</span>
+    </div>
+    <div style="font-size: 13px; color: #94A3B8; margin-top: 4px;">
+        Multi-Hop Attack Graph Reasoning, Articulation Point Analysis & Supply Chain Blast Radius
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
 # Load credentials
 load_dotenv()
@@ -79,7 +89,7 @@ client, driver = get_clients()
 
 # Sidebar Telemetry & Cache Health
 with st.sidebar:
-    st.markdown("### ⚡ Engine Performance")
+    st.markdown("### Engine Telemetry")
     st.caption("Real-Time Graph Index & Semantic Cache")
     c_stats = threat_cache.get_stats()
     
@@ -90,9 +100,9 @@ with st.sidebar:
     st.metric("Estimated Tokens Saved", f"{c_stats['estimated_tokens_saved']:,}")
     st.markdown(f"**Index:** `Neo4j Full-Text (Active)`  \n**Capacity:** `{c_stats['total_entries']}/{c_stats['capacity']}` entries")
     
-    if st.button("🧹 Flush Semantic Cache", use_container_width=True):
+    if st.button("Clear Semantic Cache", use_container_width=True):
         threat_cache.clear()
-        st.success("Cache cleared!")
+        st.success("Cache cleared successfully.")
         st.rerun()
     st.markdown("---")
 
@@ -160,40 +170,40 @@ def get_node_level(label: str, name: str, props: dict) -> int:
 def render_attack_graph(nodes_dict, edges, nodes_meta=None, graph_height=720, chokepoint_node=None):
     theme = {
         "GitHubRepo": {
-            "bg": "#2E1065", "border": "#A855F7", "highlight": "#9333EA",
-            "icon": "🐙", "badge": "Repo"
+            "bg": "#1E1035", "border": "#A855F7", "highlight": "#9333EA",
+            "badge": "Repository"
         },
         "ThreatActor": {
-            "bg": "#3B0D0C", "border": "#EF4444", "highlight": "#DC2626",
-            "icon": "💀", "badge": "Adversary"
+            "bg": "#2B0B0B", "border": "#EF4444", "highlight": "#DC2626",
+            "badge": "Threat Actor"
         },
         "AttackTechnique": {
-            "bg": "#381404", "border": "#F97316", "highlight": "#EA580C",
-            "icon": "⚡", "badge": "MITRE TTP"
+            "bg": "#271204", "border": "#F97316", "highlight": "#EA580C",
+            "badge": "Technique"
         },
         "Vulnerability": {
-            "bg": "#4C0519", "border": "#F43F5E", "highlight": "#E11D48",
-            "icon": "🚨", "badge": "CVE Flaw"
+            "bg": "#330814", "border": "#F43F5E", "highlight": "#E11D48",
+            "badge": "Vulnerability"
         },
         "SoftwarePackage": {
-            "bg": "#362003", "border": "#EAB308", "highlight": "#CA8A04",
-            "icon": "📦", "badge": "Package"
+            "bg": "#261702", "border": "#EAB308", "highlight": "#CA8A04",
+            "badge": "Dependency"
         },
         "EnterpriseService": {
-            "bg": "#082F49", "border": "#06B6D4", "highlight": "#0284C7",
-            "icon": "🌐", "badge": "DMZ Ingress"
+            "bg": "#062035", "border": "#06B6D4", "highlight": "#0284C7",
+            "badge": "Ingress"
         },
         "EnterpriseService_Core": {
-            "bg": "#1E1B4B", "border": "#818CF8", "highlight": "#6366F1",
-            "icon": "🏛️", "badge": "Tier-0 Asset"
+            "bg": "#131336", "border": "#818CF8", "highlight": "#6366F1",
+            "badge": "Tier-0 Asset"
         },
         "RemediationPatch": {
-            "bg": "#022C22", "border": "#10B981", "highlight": "#059669",
-            "icon": "🛡️", "badge": "Remediation"
+            "bg": "#032018", "border": "#10B981", "highlight": "#059669",
+            "badge": "Remediation"
         },
         "SecurityControl": {
-            "bg": "#1F2937", "border": "#9CA3AF", "highlight": "#4B5563",
-            "icon": "🔒", "badge": "Control"
+            "bg": "#151B26", "border": "#9CA3AF", "highlight": "#4B5563",
+            "badge": "Control"
         }
     }
 
@@ -228,27 +238,27 @@ def render_attack_graph(nodes_dict, edges, nodes_meta=None, graph_height=720, ch
             
         style = theme.get(lookup_label, {
             "bg": "#0F172A", "border": "#64748B", "highlight": "#475569",
-            "icon": "🔹", "badge": label
+            "badge": label
         })
         
         if label == "ThreatActor":
             primary = name.split("(")[0].strip()
             tier = props.get("tier", "State-Sponsored APT")
-            display_label = f"[{style['badge'].upper()}]\n{style['icon']} {primary}\n{tier}"
+            display_label = f"[{style['badge'].upper()}]\n{primary}\n{tier}"
         elif label == "Vulnerability":
             cve_id = name.split("(")[0].strip()
             cve_alias = name.split("(")[1].replace(")", "").strip() if "(" in name else ""
             cvss = props.get("cvss", "10.0")
             epss = props.get("epss", "").split(" ")[0]
-            metric_str = f"CVSS {cvss}" + (f" • {epss}" if epss else "")
-            display_label = f"[{style['badge'].upper()}]\n{style['icon']} {cve_id}"
+            metric_str = f"CVSS {cvss}" + (f" | {epss}" if epss else "")
+            display_label = f"[{style['badge'].upper()}]\n{cve_id}"
             if cve_alias:
                 display_label += f"\n({cve_alias})"
             display_label += f"\n{metric_str}"
         elif label == "EnterpriseService":
             cloud = props.get("cloud", "")
             cloud_short = cloud.split(" ")[0] if cloud else ""
-            display_label = f"[{style['badge'].upper()}]\n{style['icon']} {name}"
+            display_label = f"[{style['badge'].upper()}]\n{name}"
             if cloud_short:
                 display_label += f"\n[{cloud_short}]"
         elif label == "AttackTechnique":
@@ -256,7 +266,7 @@ def render_attack_graph(nodes_dict, edges, nodes_meta=None, graph_height=720, ch
             tactic = props.get("tactic", "")
             clean_name = name[:22] + "..." if len(name) > 22 else name
             badge_txt = f"{style['badge'].upper()}: {t_id}" if t_id else style['badge'].upper()
-            display_label = f"[{badge_txt}]\n{style['icon']} {clean_name}"
+            display_label = f"[{badge_txt}]\n{clean_name}"
             if tactic:
                 display_label += f"\n<{tactic}>"
         elif label == "SoftwarePackage":
@@ -267,23 +277,23 @@ def render_attack_graph(nodes_dict, edges, nodes_meta=None, graph_height=720, ch
                 pkg_show = f"{parts[0]} v{parts[1]}"
             else:
                 pkg_show = name
-            display_label = f"[{style['badge'].upper()}]\n{style['icon']} {pkg_show}"
+            display_label = f"[{style['badge'].upper()}]\n{pkg_show}"
         elif label == "RemediationPatch":
             clean_p = name.split("(")[0].strip()[:24]
             bulletin = props.get("bulletin", "").split("/")[0].strip()
-            display_label = f"[{style['badge'].upper()}]\n{style['icon']} {clean_p}"
+            display_label = f"[{style['badge'].upper()}]\n{clean_p}"
             if bulletin:
                 display_label += f"\n{bulletin[:22]}"
         elif label == "GitHubRepo":
             clean_r = name.replace("Repo: ", "").strip()
-            display_label = f"[{style['badge'].upper()}]\n{style['icon']} {clean_r}"
+            display_label = f"[{style['badge'].upper()}]\n{clean_r}"
         else:
             clean_n = name[:26] + "..." if len(name) > 26 else name
-            display_label = f"[{style['badge'].upper()}]\n{style['icon']} {clean_n}"
+            display_label = f"[{style['badge'].upper()}]\n{clean_n}"
             
         is_chokepoint = bool(chokepoint_node and (chokepoint_node.lower() == name.lower() or chokepoint_node.lower() in name.lower()))
         if is_chokepoint:
-            display_label = f"🎯 [CHOKEPOINT]\n" + display_label
+            display_label = f"[CHOKEPOINT • ARTICULATION]\n" + display_label
 
         node_bg = "#78350F" if is_chokepoint else style["bg"]
         node_border = "#F59E0B" if is_chokepoint else style["border"]
@@ -298,7 +308,7 @@ def render_attack_graph(nodes_dict, edges, nodes_meta=None, graph_height=720, ch
             "id": name,
             "label": display_label,
             "level": level,
-            "title": f"<b>[{label}]</b> {name}" + ("<br><b><span style='color:#F59E0B;'>🎯 CRITICAL GRAPH CHOKEPOINT</span></b>" if is_chokepoint else ""),
+            "title": f"<b>[{label}]</b> {name}" + ("<br><b><span style='color:#F59E0B;'>CRITICAL GRAPH CHOKEPOINT (ARTICULATION POINT)</span></b>" if is_chokepoint else ""),
             "color": {
                 "background": node_bg,
                 "border": node_border,
@@ -612,20 +622,20 @@ def render_attack_graph(nodes_dict, edges, nodes_meta=None, graph_height=720, ch
     <body>
       <div id="graph-wrapper">
         <div class="layout-bar">
-          <button class="tool-btn active-mode" id="btn-lr" onclick="setHierarchy('LR')">🏛️ Kill-Chain (LR)</button>
-          <button class="tool-btn" id="btn-ud" onclick="setHierarchy('UD')">🔻 Kill-Chain (UD)</button>
-          <button class="tool-btn" id="btn-force" onclick="setForceDirected()">🪐 Force</button>
-          <button class="tool-btn" id="freeze-btn" onclick="togglePhysics()">⏸️ Freeze</button>
-          <button class="tool-btn" onclick="downloadGraphPNG()" title="Download High-Res Attack Graph as PNG Image">📷 Export PNG</button>
-          <button class="tool-btn" onclick="downloadGraphJSON()" title="Download Topology Graph Data as JSON">📥 Export JSON</button>
+          <button class="tool-btn active-mode" id="btn-lr" onclick="setHierarchy('LR')">Hierarchy (LR)</button>
+          <button class="tool-btn" id="btn-ud" onclick="setHierarchy('UD')">Hierarchy (UD)</button>
+          <button class="tool-btn" id="btn-force" onclick="setForceDirected()">Force-Directed</button>
+          <button class="tool-btn" id="freeze-btn" onclick="togglePhysics()">Freeze</button>
+          <button class="tool-btn" onclick="downloadGraphPNG()" title="Download High-Res Attack Graph as PNG Image">PNG</button>
+          <button class="tool-btn" onclick="downloadGraphJSON()" title="Download Topology Graph Data as JSON">JSON</button>
         </div>
         <div class="zoom-toolbar">
-          <button class="zoom-btn" onclick="network.moveTo({{scale: network.getScale() * 1.35}})" title="Zoom In (+)">➕</button>
-          <button class="zoom-btn" onclick="network.moveTo({{scale: network.getScale() * 0.72}})" title="Zoom Out (-)">➖</button>
-          <button class="zoom-btn" onclick="network.fit({{animation: {{duration: 350}}}})" title="Reset View (🎯)">🎯</button>
-          <button class="zoom-btn" onclick="downloadGraphPNG()" title="Download Graph Image (PNG)">📷</button>
-          <button class="zoom-btn" onclick="downloadGraphJSON()" title="Download Graph JSON (📥)">📥</button>
-          <button class="zoom-btn" id="fs-btn" onclick="toggleFullscreen()" title="Fullscreen Toggle (⛶)">⛶</button>
+          <button class="zoom-btn" onclick="network.moveTo({{scale: network.getScale() * 1.35}})" title="Zoom In (+)">+</button>
+          <button class="zoom-btn" onclick="network.moveTo({{scale: network.getScale() * 0.72}})" title="Zoom Out (-)">−</button>
+          <button class="zoom-btn" onclick="network.fit({{animation: {{duration: 350}}}})" title="Reset / Fit View">FIT</button>
+          <button class="zoom-btn" onclick="downloadGraphPNG()" title="Download Graph Image (PNG)">PNG</button>
+          <button class="zoom-btn" onclick="downloadGraphJSON()" title="Download Graph JSON">JSON</button>
+          <button class="zoom-btn" id="fs-btn" onclick="toggleFullscreen()" title="Fullscreen Toggle">FULL</button>
         </div>
         <div id="network"></div>
         <div id="hud-panel" class="tactical-hud">
@@ -638,8 +648,8 @@ def render_attack_graph(nodes_dict, edges, nodes_meta=None, graph_height=720, ch
           </div>
           <div id="hud-content">
             <div class="hud-empty">
-              <span style="font-size: 20px;">🎯</span>
-              <span>Click any node in the attack graph above to inspect technical telemetry, attack vectors, and lateral blast radius.</span>
+              <span style="font-size: 11px; font-weight:700; color:#38BDF8; letter-spacing:0.08em; border:1px solid #1E3A8A; background:rgba(30,58,138,0.25); padding:2px 8px; border-radius:4px;">INSPECTOR</span>
+              <span>Select any node in the attack graph above to inspect technical telemetry, attack vectors, and lateral blast radius.</span>
             </div>
           </div>
         </div>
@@ -765,8 +775,8 @@ def render_attack_graph(nodes_dict, edges, nodes_meta=None, graph_height=720, ch
           
           // Column 1: Node Entity & Telemetry
           html += '<div class="hud-card">';
-          html += '<div class="hud-card-title">🔍 ENTITY TELEMETRY</div>';
-          html += '<div style="font-weight: 700; color: #FFFFFF; font-size: 12px; margin-bottom: 6px;">' + (meta.icon || '🔹') + ' ' + nodeId + '</div>';
+          html += '<div class="hud-card-title">ENTITY TELEMETRY</div>';
+          html += '<div style="font-weight: 700; color: #FFFFFF; font-size: 12px; margin-bottom: 6px;">● ' + nodeId + '</div>';
           
           if (p.cvss) {{
             html += '<div><span class="hud-badge" style="background:#EF4444;color:#FFF;">CVSS ' + p.cvss + '</span>';
@@ -774,41 +784,41 @@ def render_attack_graph(nodes_dict, edges, nodes_meta=None, graph_height=720, ch
             html += '</div>';
           }}
           if (p.vector) html += '<div style="color:#94A3B8;font-size:10px;margin-top:4px;">Vector: <code style="color:#FCA5A5;">' + p.vector + '</code></div>';
-          if (p.cisa_kev) html += '<div style="color:#F87171;font-size:10px;margin-top:2px;">⚠️ ' + p.cisa_kev + '</div>';
+          if (p.cisa_kev) html += '<div style="color:#F87171;font-size:10px;margin-top:2px;"><span style="color:#EF4444;font-weight:700;">[KEV]</span> ' + p.cisa_kev + '</div>';
           
-          if (p.cloud) html += '<div style="color:#38BDF8;font-size:10px;margin-top:4px;">☁️ ' + p.cloud + '</div>';
+          if (p.cloud) html += '<div style="color:#38BDF8;font-size:10px;margin-top:4px;"><span style="color:#0284C7;font-weight:700;">[CLOUD]</span> ' + p.cloud + '</div>';
           if (p.zone) html += '<div style="color:#94A3B8;font-size:10px;">Subnet: ' + p.zone + '</div>';
           if (p.iam_role) html += '<div style="color:#94A3B8;font-size:10px;">IAM: <code style="color:#A78BFA;">' + p.iam_role + '</code></div>';
           
           if (p.mitre_id) html += '<div><span class="hud-badge" style="background:#7C3AED;color:#FFF;">' + p.mitre_id + '</span> <span style="color:#C4B5FD;">' + (p.origin || '') + '</span></div>';
           if (p.motive) html += '<div style="color:#94A3B8;font-size:10px;margin-top:2px;">Motive: ' + p.motive + '</div>';
           
-          if (p.bulletin) html += '<div style="color:#34D399;font-size:10px;margin-top:4px;">📋 ' + p.bulletin + '</div>';
+          if (p.bulletin) html += '<div style="color:#34D399;font-size:10px;margin-top:4px;"><span style="color:#10B981;font-weight:700;">[ADVISORY]</span> ' + p.bulletin + '</div>';
           if (p.hotfix) html += '<div style="color:#A7F3D0;font-size:10px;margin-top:2px;">Fix: <code>' + p.hotfix + '</code></div>';
           html += '</div>';
           
           // Column 2: Inbound Attack Vectors
           html += '<div class="hud-card">';
-          html += '<div class="hud-card-title">⬅ INBOUND ATTACK VECTORS (' + inbound.length + ')</div>';
+          html += '<div class="hud-card-title">INBOUND ATTACK VECTORS (' + inbound.length + ')</div>';
           if (inbound.length === 0) {{
             html += '<div style="color:#64748B;font-size:10px;">No inbound exploitation paths (Perimeter / Root)</div>';
           }} else {{
             for (var i = 0; i < inbound.length; i++) {{
               var ie = inbound[i];
-              html += '<div class="hud-tag-in">⬅ <b>' + ie.from + '</b><br><span style="color:#F87171;">[' + ie.label + ']</span></div>';
+              html += '<div class="hud-tag-in">← <b>' + ie.from + '</b><br><span style="color:#F87171;">[' + ie.label + ']</span></div>';
             }}
           }}
           html += '</div>';
           
           // Column 3: Outbound Blast Radius
           html += '<div class="hud-card">';
-          html += '<div class="hud-card-title">➔ BLAST RADIUS / LATERAL MOVES (' + outbound.length + ')</div>';
+          html += '<div class="hud-card-title">OUTBOUND BLAST RADIUS (' + outbound.length + ')</div>';
           if (outbound.length === 0) {{
             html += '<div style="color:#64748B;font-size:10px;">Terminal target / Countermeasure leaf node</div>';
           }} else {{
             for (var j = 0; j < outbound.length; j++) {{
               var oe = outbound[j];
-              html += '<div class="hud-tag-out">➔ <span style="color:#FBBF24;">[' + oe.label + ']</span><br><b>' + oe.to + '</b></div>';
+              html += '<div class="hud-tag-out">→ <span style="color:#FBBF24;">[' + oe.label + ']</span><br><b>' + oe.to + '</b></div>';
             }}
           }}
           html += '</div>';
@@ -820,7 +830,7 @@ def render_attack_graph(nodes_dict, edges, nodes_meta=None, graph_height=720, ch
         }}
         
         function resetHUD() {{
-          document.getElementById('hud-content').innerHTML = '<div class="hud-empty"><span style="font-size: 20px;">🎯</span><span>Click any node in the attack graph above to inspect technical telemetry, attack vectors, and lateral blast radius.</span></div>';
+          document.getElementById('hud-content').innerHTML = '<div class="hud-empty"><span style="font-size: 11px; font-weight:700; color:#38BDF8; letter-spacing:0.08em; border:1px solid #1E3A8A; background:rgba(30,58,138,0.25); padding:2px 8px; border-radius:4px;">INSPECTOR</span><span>Select any node in the attack graph above to inspect technical telemetry, attack vectors, and lateral blast radius.</span></div>';
           document.getElementById('hud-subtitle').innerText = 'Click any graph node to inspect telemetry & attack vectors';
         }}
 
@@ -883,11 +893,11 @@ def render_attack_graph(nodes_dict, edges, nodes_meta=None, graph_height=720, ch
           var wrapper = document.getElementById('graph-wrapper');
           var net = document.getElementById('network');
           if (isFull) {{
-            if (fsBtn) fsBtn.innerText = '✖ Exit';
+            if (fsBtn) fsBtn.innerText = 'EXIT';
             wrapper.style.height = '100vh';
             net.style.height = 'calc(100vh - 220px)';
           }} else {{
-            if (fsBtn) fsBtn.innerText = '⛶ Fullscreen';
+            if (fsBtn) fsBtn.innerText = 'FULL';
             wrapper.style.height = '{wrapper_h}px';
             net.style.height = '{network_h}px';
           }}
@@ -1323,9 +1333,9 @@ components.html("""
       btns.forEach(btn => {
         const icon = btn.querySelector('.fs-icon') || btn.querySelector('#report-fs-icon');
         const text = btn.querySelector('.fs-text') || btn.querySelector('#report-fs-text');
-        if (icon) icon.innerText = isFS ? '✖' : '⛶';
-        if (text) text.innerText = isFS ? 'Exit Fullscreen' : 'Fullscreen';
-        btn.title = isFS ? 'Exit Fullscreen Reading View (Esc)' : 'Toggle Fullscreen Reading View (⛶)';
+        if (icon) icon.innerText = isFS ? 'EXIT' : 'FULL';
+        if (text) text.innerText = isFS ? 'Exit View' : 'Fullscreen';
+        btn.title = isFS ? 'Exit Fullscreen Reading View (Esc)' : 'Toggle Fullscreen Reading View';
       });
     } catch(e) {}
   }
@@ -1425,13 +1435,13 @@ components.html("""
 with container_report:
     st.markdown("""
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; padding-bottom:4px;">
-      <span style="font-size:1.15rem; font-weight:700; color:#F8FAFC;">📋 Threat Investigation & Advisory Report</span>
-      <button class="report-fullscreen-icon" data-report-fs="window" title="Toggle Fullscreen Reading View (⛶)">
-        <span class="fs-icon">⛶</span> <span class="fs-text">Fullscreen</span>
+      <span style="font-size:1.15rem; font-weight:700; color:#F8FAFC;">Threat Investigation & Advisory</span>
+      <button class="report-fullscreen-icon" data-report-fs="window" title="Toggle Fullscreen Reading View">
+        <span class="fs-icon">FULL</span> <span class="fs-text">Fullscreen</span>
       </button>
     </div>
     """, unsafe_allow_html=True)
-    tab_query, tab_sbom, tab_benchmark = st.tabs(["🕵️ Threat Query", "📦 GitHub & SBOM Supply Chain", "📊 Empirical Benchmark"])
+    tab_query, tab_sbom, tab_benchmark = st.tabs(["Threat Query", "Supply Chain Audit", "Empirical Benchmark"])
     
     with tab_query:
         sample_queries = [
@@ -1445,9 +1455,9 @@ with container_report:
         
         user_query = st.text_area("Security Analyst Query:", value=selected_sample, height=90)
         
-        if st.button("🚨 Analyze Attack Graph & Blast Radius", type="primary"):
+        if st.button("Analyze Attack Graph & Blast Radius", type="primary"):
             t_start = time.time()
-            with st.spinner("⚡ Traversing Neo4j Graph Index & Initializing AI Stream..."):
+            with st.spinner("Traversing Neo4j Graph Index & Initializing AI Stream..."):
                 entities = extract_entities(user_query)
                 facts, nodes_dict, edges, nodes_meta, metrics = fetch_threat_subgraph(entities)
                 traversal_ms = round((time.time() - t_start) * 1000, 1)
@@ -1468,9 +1478,9 @@ with container_report:
                 with rep_container:
                     st.markdown("""
                     <div id="threat-report-marker" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; border-bottom:1px solid #1E293B; padding-bottom:8px;">
-                      <span style="font-size:1.15rem; font-weight:700; color:#38BDF8;">📋 SOC Threat Intelligence Report</span>
-                      <button id="report-fs-btn" class="report-fullscreen-icon" data-report-fs="card" title="Toggle Fullscreen Reading View (⛶)">
-                        <span class="fs-icon" id="report-fs-icon">⛶</span> <span class="fs-text" id="report-fs-text">Fullscreen</span>
+                      <span style="font-size:1.15rem; font-weight:700; color:#38BDF8;">SOC Threat Intelligence Report</span>
+                      <button id="report-fs-btn" class="report-fullscreen-icon" data-report-fs="card" title="Toggle Fullscreen Reading View">
+                        <span class="fs-icon" id="report-fs-icon">FULL</span> <span class="fs-text" id="report-fs-text">Fullscreen</span>
                       </button>
                     </div>
                     """, unsafe_allow_html=True)
@@ -1478,14 +1488,14 @@ with container_report:
                     # Tactical Telemetry Scorecard
                     m1, m2, m3, m4 = st.columns(4)
                     m1.metric("Composite Risk Index", f"{metrics['composite_risk_score']}/100", delta=metrics["severity_level"], delta_color="inverse")
-                    m2.metric("Traversal Latency", f"{traversal_ms}ms", delta="⚡ Cache HIT" if is_hit else "⚡ Neo4j Multi-Hop")
+                    m2.metric("Traversal Latency", f"{traversal_ms}ms", delta="Cache HIT" if is_hit else "Neo4j Multi-Hop")
                     m3.metric("Attack Path Hops", len(edges))
                     m4.metric("Crown Jewels at Risk", len(metrics["crown_jewels_at_risk"]))
 
                     if is_hit:
-                        st.info(f"⚡ **Semantic Cache HIT:** Instant sub-millisecond retrieval • 0 LLM API tokens consumed.")
+                        st.info("Semantic Cache HIT: Instant sub-millisecond retrieval (0 LLM API tokens consumed).")
                     else:
-                        st.success(f"🚀 **Live Generation:** Multi-hop path resolved in {traversal_ms}ms • Synthesized via Google Gemini.")
+                        st.success(f"Live Generation: Multi-hop path resolved in {traversal_ms}ms via Google Gemini.")
 
                     # Token-by-token live streaming
                     stream_gen = synthesize_technical_report_stream(facts, user_query, client=client)
@@ -1496,7 +1506,7 @@ with container_report:
                     col_live_dl1, col_live_dl2 = st.columns(2)
                     with col_live_dl1:
                         st.download_button(
-                            "⬇️ Download Advisory (.md)",
+                            "Download Advisory (.md)",
                             data=answer,
                             file_name="CISA_CTI_Advisory_Report.md",
                             mime="text/markdown",
@@ -1505,7 +1515,7 @@ with container_report:
                         )
                     with col_live_dl2:
                         st.download_button(
-                            "📄 Download Advisory (.txt)",
+                            "Download Advisory (.txt)",
                             data=answer,
                             file_name="CISA_CTI_Advisory_Report.txt",
                             mime="text/plain",
@@ -1518,9 +1528,9 @@ with container_report:
             with rep_container:
                 st.markdown("""
                 <div id="threat-report-marker" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; border-bottom:1px solid #1E293B; padding-bottom:8px;">
-                  <span style="font-size:1.15rem; font-weight:700; color:#38BDF8;">📋 SOC Threat Intelligence Report</span>
-                  <button id="report-fs-btn" class="report-fullscreen-icon" data-report-fs="card" title="Toggle Fullscreen Reading View (⛶)">
-                    <span class="fs-icon" id="report-fs-icon">⛶</span> <span class="fs-text" id="report-fs-text">Fullscreen</span>
+                  <span style="font-size:1.15rem; font-weight:700; color:#38BDF8;">SOC Threat Intelligence Report</span>
+                  <button id="report-fs-btn" class="report-fullscreen-icon" data-report-fs="card" title="Toggle Fullscreen Reading View">
+                    <span class="fs-icon" id="report-fs-icon">FULL</span> <span class="fs-text" id="report-fs-text">Fullscreen</span>
                   </button>
                 </div>
                 """, unsafe_allow_html=True)
@@ -1529,19 +1539,19 @@ with container_report:
                     metrics = st.session_state["graph_metrics"]
                     m1, m2, m3, m4 = st.columns(4)
                     m1.metric("Composite Risk Index", f"{metrics['composite_risk_score']}/100", delta=metrics["severity_level"], delta_color="inverse")
-                    m2.metric("Traversal Latency", f"{st.session_state.get('traversal_ms', 12)}ms", delta="⚡ Cache HIT" if st.session_state.get("is_cached") else "⚡ Neo4j Multi-Hop")
+                    m2.metric("Traversal Latency", f"{st.session_state.get('traversal_ms', 12)}ms", delta="Cache HIT" if st.session_state.get("is_cached") else "Neo4j Multi-Hop")
                     m3.metric("Attack Path Hops", len(st.session_state.get("edges", [])))
                     m4.metric("Crown Jewels at Risk", len(metrics.get("crown_jewels_at_risk", [])))
                 
                 col_rep_meta, col_rep_md, col_rep_txt = st.columns([1.2, 0.9, 0.9])
                 with col_rep_meta:
                     if st.session_state.get("is_cached"):
-                        st.info(f"⚡ **Cached Report** (0 LLM API tokens consumed)")
+                        st.info("Cached Report (0 LLM API tokens consumed)")
                     else:
-                        st.success(f"⚡ **Neo4j Graph Traversal:** {st.session_state.get('traversal_ms', 12)}ms")
+                        st.success(f"Neo4j Graph Traversal: {st.session_state.get('traversal_ms', 12)}ms")
                 with col_rep_md:
                     st.download_button(
-                        "⬇️ Download (.md)",
+                        "Download (.md)",
                         data=st.session_state["answer"],
                         file_name="CISA_CTI_Advisory_Report.md",
                         mime="text/markdown",
@@ -1550,7 +1560,7 @@ with container_report:
                     )
                 with col_rep_txt:
                     st.download_button(
-                        "📄 Download (.txt)",
+                        "Download (.txt)",
                         data=st.session_state["answer"],
                         file_name="CISA_CTI_Advisory_Report.txt",
                         mime="text/plain",
@@ -1562,12 +1572,12 @@ with container_report:
 
         # Persistent Evidence & Interactive Forensics Copilot
         if "answer" in st.session_state and st.session_state.get("facts"):
-            with st.expander("🔍 Discovered Attack Graph Paths (Verified Evidence)"):
+            with st.expander("Discovered Attack Graph Paths (Verified Evidence)"):
                 for f in st.session_state["facts"]:
                     st.write(f)
 
             st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
-            with st.expander("💬 SOC Forensics Copilot (Interactive Attack Graph Q&A)", expanded=True):
+            with st.expander("SOC Forensics Copilot (Interactive Investigation)", expanded=True):
                 st.markdown("""
                 <div style="font-size: 13px; color: #94A3B8; margin-bottom: 8px;">
                     Ask iterative forensics questions grounded directly in the verified Neo4j attack graph, telemetry event IDs, emergency containment rules, and downstream blast radius.
@@ -1578,27 +1588,27 @@ with container_report:
                     st.session_state["copilot_chat_history"] = []
 
                 # Quick Investigation Prompts
-                st.markdown("<div style='font-size: 11px; font-weight: 700; color: #38BDF8; margin-bottom: 6px;'>⚡ QUICK SOC INVESTIGATION PROMPTS:</div>", unsafe_allow_html=True)
+                st.markdown("<div style='font-size: 11px; font-weight: 700; color: #38BDF8; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;'>Quick Investigation Prompts:</div>", unsafe_allow_html=True)
                 qp_col1, qp_col2 = st.columns(2)
                 qp_col3, qp_col4 = st.columns(2)
                 
                 quick_query = None
                 with qp_col1:
-                    if st.button("🔍 Event IDs to Detect Pivot", use_container_width=True, key="btn_qp_events"):
+                    if st.button("Event IDs to Detect Pivot", use_container_width=True, key="btn_qp_events"):
                         quick_query = "What specific Windows Security, Sysmon, or Linux audit event IDs detect this pivot?"
                 with qp_col2:
-                    if st.button("🛡️ Emergency Ingress Firewall Rule", use_container_width=True, key="btn_qp_firewall"):
+                    if st.button("Emergency Firewall Rule", use_container_width=True, key="btn_qp_firewall"):
                         quick_query = "What exact iptables or network firewall rule can we push right now to contain lateral movement?"
                 with qp_col3:
-                    if st.button("💥 Vault & PCI-DSS Blast Radius", use_container_width=True, key="btn_qp_blast"):
+                    if st.button("Vault & PCI-DSS Blast Radius", use_container_width=True, key="btn_qp_blast"):
                         quick_query = "What is the operational impact and PCI-DSS compliance blast radius if payment-token-vault is reached?"
                 with qp_col4:
-                    if st.button("📋 CISO Executive Briefing", use_container_width=True, key="btn_qp_ciso"):
+                    if st.button("CISO Executive Briefing", use_container_width=True, key="btn_qp_ciso"):
                         quick_query = "Summarize this incident into a 3-bullet executive briefing with containment urgency for the CISO."
 
                 # Render Previous Conversation Thread
                 for msg in st.session_state["copilot_chat_history"]:
-                    with st.chat_message(msg["role"], avatar="🕵️" if msg["role"] == "user" else "🛡️"):
+                    with st.chat_message(msg["role"], avatar="user" if msg["role"] == "user" else "assistant"):
                         st.markdown(msg["content"])
 
                 # Chat Input Field
@@ -1607,9 +1617,9 @@ with container_report:
 
                 if active_question:
                     st.session_state["copilot_chat_history"].append({"role": "user", "content": active_question})
-                    with st.chat_message("user", avatar="🕵️"):
+                    with st.chat_message("user", avatar="user"):
                         st.markdown(active_question)
-                    with st.chat_message("assistant", avatar="🛡️"):
+                    with st.chat_message("assistant", avatar="assistant"):
                         stream_gen = synthesize_copilot_followup_stream(
                             chat_history=st.session_state["copilot_chat_history"][:-1],
                             user_question=active_question,
@@ -1623,22 +1633,22 @@ with container_report:
                 if st.session_state["copilot_chat_history"]:
                     col_clr, _ = st.columns([1, 2])
                     with col_clr:
-                        if st.button("🧹 Clear Conversation History", key="btn_clear_copilot_chat"):
+                        if st.button("Clear Conversation History", key="btn_clear_copilot_chat"):
                             st.session_state["copilot_chat_history"] = []
                             st.rerun()
 
     with tab_sbom:
-        st.markdown("#### 📦 Software Supply Chain & Vulnerability Auditor")
+        st.markdown("#### Software Supply Chain & Vulnerability Auditor")
         st.caption("Cross-references dependency manifests against the ThreatGraphRAG Knowledge Graph to detect zero-days, active APT campaigns, and lateral movement blast radius.")
         
         audit_mode = st.radio(
             "Select Supply Chain Audit Target:",
-            ["🐙 Live GitHub Repository", "📁 Enterprise Cloud Platform SBOM"],
+            ["Live GitHub Repository", "Enterprise Cloud Platform SBOM"],
             horizontal=True
         )
         
-        if audit_mode == "🐙 Live GitHub Repository":
-            st.markdown("##### 🐙 Audit External Git Repository")
+        if audit_mode == "Live GitHub Repository":
+            st.markdown("##### Audit External Git Repository")
             preset_options = list(PRESET_REPOSITORIES.keys()) + ["Custom Repository URL / Manual Input"]
             selected_repo_preset = st.selectbox("Choose a Repository Scenario or enter Custom:", preset_options)
             
@@ -1656,13 +1666,13 @@ with container_report:
                 selected_manifest_type = None if manifest_choice in ["Auto-Detect", "Direct Manifest Paste"] else manifest_choice
             else:
                 preset_data = PRESET_REPOSITORIES[selected_repo_preset]
-                st.info(f"ℹ️ **Target:** `{preset_data['owner']}/{preset_data['repo']}` — {preset_data['description']}")
+                st.info(f"Target: `{preset_data['owner']}/{preset_data['repo']}` — {preset_data['description']}")
                 repo_url = preset_data["url"]
                 target_branch = None
                 selected_manifest_type = preset_data["manifest_type"]
                 custom_content = preset_data["simulated_manifest"]
                 
-            if st.button("🚀 Audit GitHub Repository Security", type="primary"):
+            if st.button("Audit GitHub Repository Security", type="primary"):
                 with st.spinner(f"Auditing dependencies for {repo_url} against Cyber Threat Graph..."):
                     try:
                         parsed = parse_github_url(repo_url)
@@ -1702,11 +1712,11 @@ with container_report:
                 res = st.session_state["repo_eval_res"]
                 posture = res["security_posture"]
                 if "CRITICAL" in posture:
-                    st.error(f"🚨 **ALERT: CRITICAL SUPPLY CHAIN VULNERABILITIES IDENTIFIED IN {res['repository']}!**")
+                    st.error(f"Alert: Critical Supply Chain Vulnerabilities Identified in {res['repository']}")
                 elif "HIGH" in posture or "MEDIUM" in posture:
-                    st.warning(f"⚠️ **WARNING: ELEVATED RISK IN {res['repository']}!**")
+                    st.warning(f"Warning: Elevated Risk in {res['repository']}")
                 else:
-                    st.success(f"✅ **SECURE: ZERO KNOWN ZERO-DAYS DETECTED IN {res['repository']}.**")
+                    st.success(f"Secure: Zero Known Zero-Days Detected in {res['repository']}.")
                     
                 col_m1, col_m2, col_m3, col_m4 = st.columns(4)
                 col_m1.metric("Packages Audited", res["total_dependencies_scanned"])
@@ -1715,7 +1725,7 @@ with container_report:
                 col_m4.metric("Supply Chain Risk", f"{res['composite_risk_score']}/100")
                 
                 if res["findings"]:
-                    st.markdown("##### 🔍 Identified Vulnerability Findings & Prescribed Patches")
+                    st.markdown("##### Identified Vulnerability Findings & Prescribed Patches")
                     import pandas as pd
                     df_findings = pd.DataFrame(res["findings"])[[
                         "detected_package", "cve", "cvss_score", "vulnerability_type",
@@ -1725,15 +1735,15 @@ with container_report:
                     st.dataframe(df_findings, use_container_width=True)
                     
                     if res["impacted_enterprise_services"]:
-                        st.markdown(f"**💥 Simulated Downstream Blast Radius:** `{', '.join(res['impacted_enterprise_services'])}` ➔ Can pivot to `{', '.join(res['downstream_blast_radius_targets'])}`")
+                        st.markdown(f"**Simulated Downstream Blast Radius:** `{', '.join(res['impacted_enterprise_services'])}` -> Can pivot to `{', '.join(res['downstream_blast_radius_targets'])}`")
                         
                 if "repo_ai_report" in st.session_state and st.session_state["repo_ai_report"]:
-                    with st.expander("📋 SOC Threat Intelligence & Remediation Roadmap (AI-Generated)", expanded=True):
+                    with st.expander("SOC Threat Intelligence & Remediation Roadmap (AI-Generated)", expanded=True):
                         st.markdown("""
                         <div id="threat-report-marker" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; border-bottom:1px solid #1E293B; padding-bottom:8px;">
-                          <span style="font-size:1.05rem; font-weight:700; color:#38BDF8;">📋 SOC Threat Intelligence & Remediation Roadmap</span>
-                          <button id="report-fs-btn" class="report-fullscreen-icon" data-report-fs="card" title="Toggle Fullscreen Reading View (⛶)">
-                            <span class="fs-icon" id="report-fs-icon">⛶</span> <span class="fs-text" id="report-fs-text">Fullscreen</span>
+                          <span style="font-size:1.05rem; font-weight:700; color:#38BDF8;">SOC Threat Intelligence & Remediation Roadmap</span>
+                          <button id="report-fs-btn" class="report-fullscreen-icon" data-report-fs="card" title="Toggle Fullscreen Reading View">
+                            <span class="fs-icon" id="report-fs-icon">FULL</span> <span class="fs-text" id="report-fs-text">Fullscreen</span>
                           </button>
                         </div>
                         """, unsafe_allow_html=True)
@@ -1741,7 +1751,7 @@ with container_report:
                         col_sb_dl1, col_sb_dl2 = st.columns(2)
                         with col_sb_dl1:
                             st.download_button(
-                                "⬇️ Download SBOM Advisory (.md)",
+                                "Download SBOM Advisory (.md)",
                                 data=st.session_state["repo_ai_report"],
                                 file_name=f"SupplyChain_Security_Audit_{res['repository'].replace('/', '_')}.md",
                                 mime="text/markdown",
@@ -1750,7 +1760,7 @@ with container_report:
                             )
                         with col_sb_dl2:
                             st.download_button(
-                                "📄 Download SBOM Advisory (.txt)",
+                                "Download SBOM Advisory (.txt)",
                                 data=st.session_state["repo_ai_report"],
                                 file_name=f"SupplyChain_Security_Audit_{res['repository'].replace('/', '_')}.txt",
                                 mime="text/plain",
@@ -1758,13 +1768,13 @@ with container_report:
                                 key="dl_repo_ai_txt"
                             )
                         
-                st.success("✅ Interactive Attack Graph on the right updated with the repository supply chain topology!")
+                st.success("Interactive Attack Graph on the right updated with the repository supply chain topology.")
 
         else:
-            st.markdown("##### 📁 Enterprise Cloud Platform SBOM (CycloneDX)")
+            st.markdown("##### Enterprise Cloud Platform SBOM (CycloneDX)")
             st.caption("Cross-references enterprise dependency manifests against the ThreatGraphRAG Knowledge Graph to detect zero-days and threat actors.")
             
-            if st.button("🛡️ Audit Enterprise Platform Dependencies", type="primary"):
+            if st.button("Audit Enterprise Platform Dependencies", type="primary"):
                 with st.spinner("Auditing SBOM against ThreatGraphRAG Knowledge Base..."):
                     import json
                     sbom_path = "data/sample_enterprise_sbom.json"
@@ -1858,22 +1868,22 @@ with container_report:
                         st.session_state["nodes_meta"] = nodes_meta
                         st.session_state["entities"] = list(infected_nodes.keys())
                         
-                        st.error(f"🚨 ALERT: {len(all_cves)} Critical Zero-Day Vulnerabilities Detected in Deployment!")
+                        st.error(f"Alert: {len(all_cves)} Critical Zero-Day Vulnerabilities Detected in Deployment!")
                         
                         sb_col1, sb_col2, sb_col3 = st.columns(3)
                         sb_col1.metric("Services Audited", len(sbom_data["services"]))
                         sb_col2.metric("Critical CVEs", len(all_cves), delta="CRITICAL", delta_color="inverse")
                         sb_col3.metric("Targeting Adversaries", ", ".join(all_actors) if all_actors else "None")
                         
-                        st.markdown("##### 🔍 Identified Vulnerable Dependencies & Prescribed Fixes")
+                        st.markdown("##### Identified Vulnerable Dependencies & Prescribed Fixes")
                         import pandas as pd
                         st.dataframe(pd.DataFrame(findings), use_container_width=True)
-                        st.success("✅ Interactive Attack Graph updated on the right to visualize the infected supply chain paths!")
+                        st.success("Interactive Attack Graph updated on the right to visualize the infected supply chain paths.")
                     else:
                         st.error("Sample SBOM file not found at data/sample_enterprise_sbom.json")
 
     with tab_benchmark:
-        st.markdown("#### 🔬 Empirical Evaluation: Naive Vector RAG vs. ThreatGraphRAG")
+        st.markdown("#### Empirical Evaluation: Naive Vector RAG vs. ThreatGraphRAG")
         st.caption("Quantitative benchmark evaluated on multi-hop attack paths, factual grounding, and remediation precision.")
         
         benchmark_file = "benchmark_results.csv"
@@ -1891,22 +1901,22 @@ with container_report:
             m2.metric("Answer Faithfulness", f"{df['Graph_Faithfulness'].mean()*100:.1f}%", f"+{diff_faith:.1f}% vs Vector RAG")
             m3.metric("Remediation Precision", f"{df['Graph_Precision'].mean()*100:.1f}%", f"+{diff_prec:.1f}% vs Vector RAG")
             
-            st.markdown("##### 📈 Performance Comparison Across Metrics")
+            st.markdown("##### Performance Comparison Across Metrics")
             chart_df = pd.DataFrame({
                 "Naive Vector RAG": [df["Vector_Recall"].mean()*100, df["Vector_Faithfulness"].mean()*100, df["Vector_Precision"].mean()*100],
                 "ThreatGraphRAG (Ours)": [df["Graph_Recall"].mean()*100, df["Graph_Faithfulness"].mean()*100, df["Graph_Precision"].mean()*100]
             }, index=["Multi-Hop Recall", "Answer Faithfulness", "Remediation Precision"])
             st.bar_chart(chart_df)
             
-            st.markdown("##### 📋 Granular Test Case Breakdown")
+            st.markdown("##### Granular Test Case Breakdown")
             st.dataframe(df, use_container_width=True)
         else:
             st.info("Benchmark is currently running in the background. Refresh this page in a moment to view the live charts!")
 
 with container_graph:
-    col_g_title, col_g_dl = st.columns([1.5, 1])
+    col_g_title, col_g_dl = st.columns([1.6, 1])
     with col_g_title:
-        st.subheader("🕸️ Interactive Attack Graph & Blast Radius")
+        st.markdown("<h3 style='margin:0; font-size:1.15rem; font-weight:700; color:#F8FAFC;'>Attack Graph & Active Defense</h3>", unsafe_allow_html=True)
     with col_g_dl:
         if "edges" in st.session_state and st.session_state["edges"]:
             import json
@@ -1919,25 +1929,14 @@ with container_graph:
                 "exported_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
             }
             st.download_button(
-                "⬇️ Export Graph Data (JSON)",
+                "Export Graph Data (JSON)",
                 data=json.dumps(graph_export_payload, indent=2),
                 file_name="ThreatGraph_Attack_Topology.json",
                 mime="application/json",
                 use_container_width=True,
                 key="btn_dl_graph_json"
             )
-    st.markdown("""
-    <div style="display: flex; flex-wrap: wrap; gap: 6px; font-size: 11px; margin-bottom: 10px; font-weight: 600;">
-        <span style="background: #3B0D0C; color: #FCA5A5; padding: 3px 8px; border-radius: 4px; border: 1px solid #EF4444;">💀 Adversary</span>
-        <span style="background: #381404; color: #FDBA74; padding: 3px 8px; border-radius: 4px; border: 1px solid #F97316;">⚡ MITRE TTP</span>
-        <span style="background: #4C0519; color: #FDA4AF; padding: 3px 8px; border-radius: 4px; border: 1px solid #F43F5E;">🚨 CVE Flaw</span>
-        <span style="background: #362003; color: #FDE047; padding: 3px 8px; border-radius: 4px; border: 1px solid #EAB308;">📦 Package</span>
-        <span style="background: #082F49; color: #67E8F9; padding: 3px 8px; border-radius: 4px; border: 1px solid #06B6D4;">🌐 DMZ Ingress</span>
-        <span style="background: #1E1B4B; color: #C7D2FE; padding: 3px 8px; border-radius: 4px; border: 1px solid #818CF8;">🏛️ Tier-0 Asset</span>
-        <span style="background: #022C22; color: #6EE7B7; padding: 3px 8px; border-radius: 4px; border: 1px solid #10B981;">🛡️ Remediation</span>
-        <span style="background: #2E1065; color: #E9D5FF; padding: 3px 8px; border-radius: 4px; border: 1px solid #A855F7;">🐙 Repo</span>
-    </div>
-    """, unsafe_allow_html=True)
+
     if "edges" in st.session_state and st.session_state["edges"]:
         # Algorithmic Chokepoint & Quantitative Risk Computation
         chokepoint_data = compute_graph_chokepoints(
@@ -1948,54 +1947,83 @@ with container_graph:
         st.session_state["chokepoint_data"] = chokepoint_data
         primary_chokepoint = chokepoint_data.get("primary_chokepoint")
         risk_mod = chokepoint_data.get("risk_modeling", {})
+        is_perfect_cut = chokepoint_data.get("is_perfect_cut", False)
 
-        # Chokepoint & Quantitative Risk Analysis Panel
-        with st.expander("🎯 Algorithmic Chokepoint & Quantitative Risk Engine (Graph Theory)", expanded=True):
+        tab_graph_canvas, tab_chokepoint_view, tab_countermeasure_view = st.tabs([
+            "Topology Graph",
+            "Chokepoint & Risk Analytics",
+            "Countermeasure Simulator"
+        ])
+
+        with tab_graph_canvas:
+            # Minimalist, elegant status ribbon legend (clean dots, no emojis)
             st.markdown("""
-            <div style="font-size: 13px; color: #94A3B8; margin-bottom: 12px;">
+            <div style="display: flex; flex-wrap: wrap; gap: 8px; font-size: 11px; margin-bottom: 8px; font-weight: 500; color: #94A3B8;">
+                <span style="background: rgba(239, 68, 68, 0.12); color: #FCA5A5; padding: 2px 7px; border-radius: 4px; border: 1px solid rgba(239, 68, 68, 0.3);"><span style="color:#EF4444;">●</span> Threat Actor</span>
+                <span style="background: rgba(249, 115, 22, 0.12); color: #FDBA74; padding: 2px 7px; border-radius: 4px; border: 1px solid rgba(249, 115, 22, 0.3);"><span style="color:#F97316;">●</span> Technique</span>
+                <span style="background: rgba(244, 63, 94, 0.12); color: #FDA4AF; padding: 2px 7px; border-radius: 4px; border: 1px solid rgba(244, 63, 94, 0.3);"><span style="color:#F43F5E;">●</span> Vulnerability</span>
+                <span style="background: rgba(234, 179, 8, 0.12); color: #FDE047; padding: 2px 7px; border-radius: 4px; border: 1px solid rgba(234, 179, 8, 0.3);"><span style="color:#EAB308;">●</span> Dependency</span>
+                <span style="background: rgba(6, 182, 212, 0.12); color: #67E8F9; padding: 2px 7px; border-radius: 4px; border: 1px solid rgba(6, 182, 212, 0.3);"><span style="color:#06B6D4;">●</span> Ingress</span>
+                <span style="background: rgba(129, 140, 248, 0.12); color: #C7D2FE; padding: 2px 7px; border-radius: 4px; border: 1px solid rgba(129, 140, 248, 0.3);"><span style="color:#818CF8;">●</span> Tier-0 Asset</span>
+                <span style="background: rgba(16, 185, 129, 0.12); color: #6EE7B7; padding: 2px 7px; border-radius: 4px; border: 1px solid rgba(16, 185, 129, 0.3);"><span style="color:#10B981;">●</span> Remediation</span>
+                <span style="background: rgba(245, 158, 11, 0.15); color: #FDE68A; padding: 2px 7px; border-radius: 4px; border: 1px solid rgba(245, 158, 11, 0.5);"><span style="color:#F59E0B;">●</span> Chokepoint</span>
+            </div>
+            """, unsafe_allow_html=True)
+
+            # Compact Tactical Chokepoint Ribbon
+            if primary_chokepoint:
+                p_breach = risk_mod.get("cumulative_breach_probability", 95.0)
+                ttc_display = risk_mod.get("fastest_time_to_compromise", "~20m")
+                cut_badge = "S-T Cut-Vertex" if is_perfect_cut else "Bridge Pivot"
+                st.markdown(f"""
+                <div style="background: rgba(245, 158, 11, 0.07); border: 1px solid rgba(245, 158, 11, 0.25); border-left: 3px solid #F59E0B; padding: 7px 12px; border-radius: 4px; font-size: 12px; color: #F8FAFC; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+                    <div><span style="color: #FBBF24; font-weight: 600;">Primary Chokepoint:</span> <code style="color: #FEF08A; background: rgba(0,0,0,0.3); padding: 1px 5px; border-radius: 3px;">{primary_chokepoint}</code> <span style="font-size: 10px; color: #F59E0B; text-transform: uppercase; margin-left: 4px;">({cut_badge})</span></div>
+                    <div style="color: #94A3B8; font-size: 11.5px;">Breach Probability: <b style="color: #F87171;">{p_breach}%</b> | Est. TTC: <b style="color: #FBBF24;">{ttc_display}</b></div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            # Graph Canvas
+            graph_nodes = st.session_state["nodes_dict"]
+            graph_edges = st.session_state["edges"]
+            graph_meta = st.session_state.get("nodes_meta")
+            
+            if "countermeasure_sim" in st.session_state and st.session_state.get("chk_show_sim_graph", True):
+                graph_nodes = st.session_state["countermeasure_sim"]["visual_nodes"]
+                graph_edges = st.session_state["countermeasure_sim"]["visual_edges"]
+                st.caption(f"Showing attack path with simulated mitigation on `{st.session_state['countermeasure_sim']['target_entity']}` (Red dashed edges indicate blocked hops)")
+            else:
+                st.caption(f"Showing attack path for: {', '.join(st.session_state.get('entities', []))} • (Click node to inspect properties)")
+                
+            render_attack_graph(graph_nodes, graph_edges, graph_meta, graph_height=680, chokepoint_node=primary_chokepoint)
+
+        with tab_chokepoint_view:
+            st.markdown("""
+            <div style="font-size: 13px; color: #94A3B8; margin-bottom: 14px;">
                 Identifies graph-theoretic <b>S-T Articulation Points (Cut-Vertices)</b> and computes <b>Bayesian cumulative exploitability</b> across all discovered attack paths leading to Tier-0 crown jewels.
             </div>
             """, unsafe_allow_html=True)
             
             cp_col1, cp_col2, cp_col3, cp_col4 = st.columns(4)
-            is_perfect_cut = chokepoint_data.get("is_perfect_cut", False)
             p_breach = risk_mod.get("cumulative_breach_probability", 95.0)
             ttc_display = risk_mod.get("fastest_time_to_compromise", "~20m")
             active_paths_count = chokepoint_data.get("total_active_paths", 0)
 
-            cp_col1.metric(
-                "Primary Chokepoint",
-                primary_chokepoint or "None Identified",
-                delta="🎯 Perfect Cut-Vertex" if is_perfect_cut else "Bridge Pivot"
-            )
-            cp_col2.metric(
-                "Cumulative Breach Prob",
-                f"{p_breach}%",
-                delta="CVSS/EPSS Bayesian Risk",
-                delta_color="inverse"
-            )
-            cp_col3.metric(
-                "Est. Time-to-Compromise",
-                ttc_display,
-                delta=risk_mod.get("exploit_maturity_tier", "WEAPONIZED")
-            )
-            cp_col4.metric(
-                "Active Kill-Chain Paths",
-                active_paths_count,
-                delta="Direct Traversal Paths"
-            )
+            cp_col1.metric("Primary Chokepoint", primary_chokepoint or "None Identified", delta="Cut-Vertex" if is_perfect_cut else "Bridge Pivot")
+            cp_col2.metric("Cumulative Breach Prob", f"{p_breach}%", delta="Bayesian Risk", delta_color="inverse")
+            cp_col3.metric("Est. Time-to-Compromise", ttc_display, delta=risk_mod.get("exploit_maturity_tier", "WEAPONIZED"))
+            cp_col4.metric("Active Attack Paths", active_paths_count, delta="Direct Traversals")
 
             if primary_chokepoint:
                 rankings = chokepoint_data.get("chokepoint_rankings", [])
                 top_cut_pct = rankings[0].get("severance_percentage", 100.0) if rankings else 100.0
                 st.markdown(f"""
-                <div style="background: rgba(245, 158, 11, 0.08); border-left: 3px solid #F59E0B; padding: 10px 14px; border-radius: 4px; font-size: 13px; color: #F8FAFC; margin: 8px 0 14px 0;">
-                    <b style="color: #FBBF24;">🎯 Tactical Chokepoint Strategy:</b> Neutralizing <b><code>{primary_chokepoint}</code></b> severs <b>{top_cut_pct}%</b> of all active adversary traversals to Tier-0 assets. Highlighted with a golden halo on the graph canvas.
+                <div style="background: rgba(245, 158, 11, 0.08); border-left: 3px solid #F59E0B; padding: 10px 14px; border-radius: 4px; font-size: 13px; color: #F8FAFC; margin: 12px 0 16px 0;">
+                    <b style="color: #FBBF24;">Tactical Strategy:</b> Neutralizing <b><code>{primary_chokepoint}</code></b> severs <b>{top_cut_pct}%</b> of all active adversary traversals to Tier-0 assets. Highlighted with a golden indicator on the graph canvas.
                 </div>
                 """, unsafe_allow_html=True)
 
                 if rankings:
-                    st.markdown("###### 📊 Mathematically Ranked Intervention Priorities")
+                    st.markdown("##### Mathematically Ranked Intervention Priorities")
                     import pandas as pd
                     df_rankings = pd.DataFrame([
                         {
@@ -2003,7 +2031,7 @@ with container_graph:
                             "Entity Type": r["label"],
                             "Path Severance": f"{r['severance_percentage']}%",
                             "Betweenness Centrality": r["betweenness_score"],
-                            "Articulation Point": "🎯 Cut-Vertex" if r["is_articulation_point"] else "Bridge",
+                            "Articulation Point": "Cut-Vertex" if r["is_articulation_point"] else "Bridge",
                             "Recommended Countermeasure": r["recommended_action"],
                             "Friction Cost": r["operational_friction"]
                         }
@@ -2011,23 +2039,30 @@ with container_graph:
                     ])
                     st.dataframe(df_rankings, use_container_width=True, hide_index=True)
 
-        # Extract candidate mitigation targets (CVEs, Services, Packages)
-        nodes_dict = st.session_state["nodes_dict"]
-        cve_candidates = [n for n, l in nodes_dict.items() if l == "Vulnerability"]
-        svc_candidates = [n for n, l in nodes_dict.items() if l == "EnterpriseService"]
-        pkg_candidates = [n for n, l in nodes_dict.items() if l == "SoftwarePackage"]
-        all_candidates = cve_candidates + svc_candidates + pkg_candidates
-        if not all_candidates:
-            all_candidates = list(nodes_dict.keys())
+            # Optional deep dive: Bayesian path breakdowns
+            path_evals = risk_mod.get("path_evaluations", [])
+            if path_evals:
+                with st.expander("Discovered Attack Hop Chains & Bayesian Risk Breakdown"):
+                    for idx, pe in enumerate(path_evals, 1):
+                        st.markdown(f"**Path {idx}:** `{pe['path_chain']}`")
+                        st.caption(f"Hops: {pe['hops_count']} | Exploitability: {pe['path_exploitability_percent']}% | Est. TTC: ~{pe['estimated_ttc_minutes']}m")
 
-        # What-If Countermeasure Simulator Expander
-        with st.expander("🛡️ Interactive 'What-If' Countermeasure Simulator & Defense Playbooks", expanded=True):
+        with tab_countermeasure_view:
             st.markdown("""
-            <div style="font-size: 13px; color: #94A3B8; margin-bottom: 8px;">
+            <div style="font-size: 13px; color: #94A3B8; margin-bottom: 12px;">
                 Simulate removing a vulnerability (patching) or severing network ingress (pod isolation) to mathematically evaluate kill-chain reachability and compile deployable SOAR detection rules.
             </div>
             """, unsafe_allow_html=True)
-            
+
+            # Candidate selection & execution
+            nodes_dict = st.session_state["nodes_dict"]
+            cve_candidates = [n for n, l in nodes_dict.items() if l == "Vulnerability"]
+            svc_candidates = [n for n, l in nodes_dict.items() if l == "EnterpriseService"]
+            pkg_candidates = [n for n, l in nodes_dict.items() if l == "SoftwarePackage"]
+            all_candidates = cve_candidates + svc_candidates + pkg_candidates
+            if not all_candidates:
+                all_candidates = list(nodes_dict.keys())
+
             col_sim_target, col_sim_action, col_sim_btn = st.columns([1.6, 1.2, 0.9])
             with col_sim_target:
                 default_target_idx = 0
@@ -2036,12 +2071,12 @@ with container_graph:
                 target_choice = st.selectbox("Select Target Node to Mitigate:", all_candidates, index=default_target_idx, key="cm_target_select")
             with col_sim_action:
                 default_act_idx = 0 if any(flaw in str(target_choice) for flaw in ["CVE-", "log4j", "xz-utils", "fortios", "spring"]) else 1
-                action_mode = st.radio("Mitigation Action:", ["🛡️ Patch Vulnerability", "🔒 Isolate Pod / Host"], index=default_act_idx, horizontal=True, key="cm_action_mode")
+                action_mode = st.radio("Mitigation Action:", ["Patch Vulnerability", "Isolate Pod / Host"], index=default_act_idx, horizontal=True, key="cm_action_mode")
                 action_type = "patch" if "Patch" in action_mode else "isolate"
             with col_sim_btn:
                 st.write("")
                 st.write("")
-                sim_btn = st.button("⚡ Run Simulation", type="primary", use_container_width=True, key="btn_run_cm_sim")
+                sim_btn = st.button("Simulate Mitigation", type="primary", use_container_width=True, key="btn_run_cm_sim")
 
             if sim_btn:
                 sim_res = simulate_countermeasure(
@@ -2058,32 +2093,32 @@ with container_graph:
                 
                 # Tactical Scorecard
                 sc1, sc2, sc3, sc4 = st.columns(4)
-                sc1.metric("Kill-Chain Reachability", "🟢 SEVERED" if cm["kill_chain_broken"] else "⚠️ PARTIAL", delta="0 Hops to Jewels" if cm["kill_chain_broken"] else "Residual Path")
+                sc1.metric("Kill-Chain Reachability", "SEVERED" if cm["kill_chain_broken"] else "PARTIAL", delta="0 Hops to Jewels" if cm["kill_chain_broken"] else "Residual Path")
                 sc2.metric("Composite Risk Index", f"{cm['after_metrics']['composite_risk_score']}/100", delta=f"-{cm['risk_delta']} pts", delta_color="inverse")
                 sc3.metric("Severed Attack Hops", cm["severed_edges_count"], delta="BLOCKED")
                 sc4.metric("Crown Jewels Protected", len(cm["protected_crown_jewels"]))
 
                 if cm["kill_chain_broken"]:
-                    st.success(f"✅ **MATHEMATICAL PROOF: KILL-CHAIN TERMINATED.** Traversal reachability from ingress to Tier-0 crown jewels drops to 0. Lateral movement paths to `{', '.join(cm['protected_crown_jewels']) if cm['protected_crown_jewels'] else 'crown jewels'}` are broken.")
+                    st.success(f"**Mathematical Proof: Kill-Chain Terminated.** Reachability from adversary ingress to Tier-0 crown jewels drops to 0. Lateral movement paths to `{', '.join(cm['protected_crown_jewels']) if cm['protected_crown_jewels'] else 'crown jewels'}` are broken.")
                 else:
-                    st.warning("⚠️ **PARTIAL CONTAINMENT:** Primary attack hop severed, but secondary pivot paths remain active.")
+                    st.warning("Partial Containment: Primary attack hop severed, but secondary pivot paths remain active.")
 
                 col_toggle_graph, col_reset_sim = st.columns([2, 1])
                 with col_toggle_graph:
-                    show_sim_graph = st.checkbox("🎨 Overlay Severed Attack Edges on Graph Canvas (Red dashed [BLOCKED] lines)", value=True, key="chk_show_sim_graph")
+                    show_sim_graph = st.checkbox("Highlight Blocked Hops on Canvas (Red dashed lines)", value=True, key="chk_show_sim_graph")
                 with col_reset_sim:
-                    if st.button("🔄 Reset to Baseline Graph", use_container_width=True, key="btn_reset_sim"):
+                    if st.button("Reset Graph View", use_container_width=True, key="btn_reset_sim"):
                         del st.session_state["countermeasure_sim"]
                         st.rerun()
 
-                st.markdown("##### 🛠️ Auto-Generated SecOps Defense Artifacts (Deployable)")
-                tab_sig, tab_k8s, tab_sh = st.tabs(["📄 Sigma SIEM Rule (.yml)", "☸️ Kubernetes NetworkPolicy (.yaml)", "💻 DevOps Quarantine Script (.sh)"])
+                st.markdown("##### Deployable SecOps Defense Artifacts")
+                tab_sig, tab_k8s, tab_sh = st.tabs(["Sigma Rule (YAML)", "Kubernetes Policy (YAML)", "Quarantine Script (Bash)"])
                 
                 with tab_sig:
                     st.caption("Standardized Sigma detection rule for SIEM ingestion (Splunk, Microsoft Sentinel, Elastic, QRadar).")
                     st.code(cm["defense_artifacts"]["sigma_rule"], language="yaml")
                     st.download_button(
-                        "⬇️ Download Sigma Rule (.yml)",
+                        "Download Sigma Rule (.yml)",
                         data=cm["defense_artifacts"]["sigma_rule"],
                         file_name=f"sigma_detect_{cm['target_entity'].replace(':', '_').replace('/', '_')}.yml",
                         mime="text/yaml",
@@ -2094,7 +2129,7 @@ with container_graph:
                     st.caption("Zero-Trust Kubernetes NetworkPolicy restricting lateral network sockets to/from the compromised pod.")
                     st.code(cm["defense_artifacts"]["kubernetes_policy"], language="yaml")
                     st.download_button(
-                        "⬇️ Download NetworkPolicy (.yaml)",
+                        "Download NetworkPolicy (.yaml)",
                         data=cm["defense_artifacts"]["kubernetes_policy"],
                         file_name=f"k8s_isolate_{cm['target_entity'].replace(':', '_').replace('/', '_')}.yaml",
                         mime="text/yaml",
@@ -2105,26 +2140,12 @@ with container_graph:
                     st.caption("Automated bash incident response playbook executing pod cordoning, iptables severing, and forensic labeling.")
                     st.code(cm["defense_artifacts"]["quarantine_script"], language="bash")
                     st.download_button(
-                        "⬇️ Download Quarantine Script (.sh)",
+                        "Download Quarantine Script (.sh)",
                         data=cm["defense_artifacts"]["quarantine_script"],
                         file_name=f"quarantine_{cm['target_entity'].replace(':', '_').replace('/', '_')}.sh",
                         mime="text/x-sh",
                         use_container_width=True,
                         key="dl_cm_sh"
                     )
-
-        # Graph Rendering (either baseline or simulation visual overlay)
-        graph_nodes = st.session_state["nodes_dict"]
-        graph_edges = st.session_state["edges"]
-        graph_meta = st.session_state.get("nodes_meta")
-        
-        if "countermeasure_sim" in st.session_state and st.session_state.get("chk_show_sim_graph", True):
-            graph_nodes = st.session_state["countermeasure_sim"]["visual_nodes"]
-            graph_edges = st.session_state["countermeasure_sim"]["visual_edges"]
-            st.caption(f"Showing attack path with **Simulated Countermeasure applied on `{st.session_state['countermeasure_sim']['target_entity']}`** • (Red dashed edges indicate `[BLOCKED]` hops)")
-        else:
-            st.caption(f"Showing attack path for: {', '.join(st.session_state.get('entities', []))} • (🎯 Golden halo highlights primary articulation point `{primary_chokepoint}` • Click node to inspect • 📷 Export PNG or 📥 Export JSON in top toolbar)")
-            
-        render_attack_graph(graph_nodes, graph_edges, graph_meta, graph_height=700, chokepoint_node=primary_chokepoint)
     else:
-        st.info("Execute a threat scenario on the left to visualize the attack path and lateral movement graph!")
+        st.info("Execute a threat scenario on the left to visualize the attack path and lateral movement graph.")

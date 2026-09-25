@@ -518,8 +518,8 @@ def generate_ai_repo_audit_report(repo_identifier: str, evaluation_results: Dict
     total_scanned = evaluation_results.get("total_dependencies_scanned", 0)
     
     if not findings:
-        return f"""### 🛡️ Repository Security Audit: {repo_identifier}
-**Status:** ✅ **{posture}**
+        return f"""### Repository Security Audit: {repo_identifier}
+**Status:** [VERIFIED] **{posture}**
 - **Scanned Dependencies:** {total_scanned} packages audited.
 - **Threat Intelligence Correlation:** Zero known zero-day exploits or state-sponsored APT targets detected in the active knowledge graph.
 - **Action:** No immediate remediation required. Continue automated CI/CD dependency monitoring.
@@ -542,20 +542,20 @@ EVALUATION TELEMETRY:
 {findings_summary}
 
 Generate an authoritative, deeply technical, and legible Executive Repository Audit Report in GitHub Markdown containing:
-### 1. 🛡️ Executive Threat Briefing & Risk Scorecard
+### 1. Executive Threat Briefing & Risk Scorecard
 - Summary table: Package | Target CVE | CVSS v3.1 | Threat Actor | Status
 - 2-3 concise bullet points summarizing deployment risk and business impact.
 
-### 2. 🔬 Supply Chain Attack Vectors & Exploitation Mechanics
+### 2. Supply Chain Attack Vectors & Exploitation Mechanics
 - Technical breakdown of the vulnerability class (e.g. JNDI injection, classloader override, upstream build macro tampering).
 - Full dependency kill-chain vector:
   `[Repository: {repo_identifier}]` ──► `[Software Package]` ──► `[CVE]` ──► `[Adversary / Campaign]`
 
-### 3. 💥 Enterprise Blast Radius Simulation
+### 3. Enterprise Blast Radius Simulation
 - Detail which microservices and infrastructure components would be exposed if this repository is deployed into production.
 - Potential lateral movement pathways to internal databases, credentials, or payment channels.
 
-### 4. 🛠️ Prioritized Technical Remediation Protocol
+### 4. Prioritized Technical Remediation Protocol
 - **Tier 1 (Immediate Containment)**: Compiler flags, runtime JVM/OS parameters, or WAF rules.
 - **Tier 2 (Upstream Patching)**: Specific recommended patch versions and manifest lockfile updates.
 - **Tier 3 (Zero-Trust Hardening)**: CI/CD dependency pinning, SLSA provenance verification, and container least-privilege policies.
@@ -585,12 +585,12 @@ Generate an authoritative, deeply technical, and legible Executive Repository Au
         for f in findings
     ])
     
-    return f"""### 🛡️ Executive Supply Chain Security Audit: {repo_identifier}
+    return f"""### Executive Supply Chain Security Audit: {repo_identifier}
 **Threat Posture:** `{posture}` | **Risk Rating:** HIGH/CRITICAL | **Active APT Actors:** {", ".join(actors) if actors else "Unattributed"}
 
 ---
 
-#### 1. 📋 Executive Threat Briefing & Risk Scorecard
+#### 1. Executive Threat Briefing & Risk Scorecard
 
 | Audited Dependency | Identified CVE | CVSS v3.1 Severity | Attributed Adversary | Exploit Status |
 | :--- | :--- | :--- | :--- | :--- |
@@ -601,7 +601,7 @@ Generate an authoritative, deeply technical, and legible Executive Repository Au
 
 ---
 
-#### 2. 🔬 Technical Exploitation Mechanics & Supply Chain Vector
+#### 2. Technical Exploitation Mechanics & Supply Chain Vector
 
 ```
 [Repository: {repo_identifier}]
@@ -621,14 +621,14 @@ Generate an authoritative, deeply technical, and legible Executive Repository Au
 
 ---
 
-#### 3. 💥 Enterprise Blast Radius Simulation
+#### 3. Enterprise Blast Radius Simulation
 
 * **Direct Exposure Asset:** Microservices integrating `{repo_identifier}` (e.g. Ingress gateways, Authentication services).
 * **Lateral Movement Vectors:** Compromised containers can be leveraged to extract cloud service account keys (IAM), dump internal environment variables, and pivot to backend transaction systems.
 
 ---
 
-#### 4. 🛠️ Prioritized Technical Remediation Protocol
+#### 4. Prioritized Technical Remediation Protocol
 
 * **Tier 1: Immediate Containment (Within 1 Hour)**
   - Halt automated CI/CD deployment pipelines referencing `{repo_identifier}` until dependencies are remediated.

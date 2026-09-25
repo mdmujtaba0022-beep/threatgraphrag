@@ -128,30 +128,30 @@ def root_dashboard():
 <body>
     <div class="card">
         <div style="display:flex; justify-content:space-between; align-items:center;">
-            <h1>🛡️ ThreatGraphRAG REST API</h1>
+            <h1>ThreatGraphRAG REST API</h1>
             <span class="badge">● ONLINE (HTTP 200)</span>
         </div>
         <p>Enterprise Cyber Threat Intelligence, Graph-Theoretic Chokepoint Engine, and Multi-Hop Attack Path Reasoning Service.</p>
         <div style="margin-top: 20px;">
-            <a href="/docs" class="btn">🚀 Open Swagger Interactive Docs (/docs)</a>
-            <a href="/redoc" class="btn btn-outline">📚 ReDoc API Spec</a>
-            <a href="/health" class="btn btn-outline">💓 Health Check</a>
+            <a href="/docs" class="btn">Swagger Interactive Docs (/docs)</a>
+            <a href="/redoc" class="btn btn-outline">ReDoc API Spec</a>
+            <a href="/health" class="btn btn-outline">Health Check</a>
         </div>
         <div class="grid">
             <div class="item">
-                <b>🎯 Chokepoint Analysis</b><br/>
+                <b>Chokepoint Analysis</b><br/>
                 <code style="color:#F59E0B;">POST /api/graph/chokepoint-analysis</code>
             </div>
             <div class="item">
-                <b>🛡️ Defense Simulator</b><br/>
+                <b>Defense Simulator</b><br/>
                 <code style="color:#10B981;">POST /api/countermeasure/simulate</code>
             </div>
             <div class="item">
-                <b>💬 SOC Forensics Copilot</b><br/>
+                <b>SOC Forensics Copilot</b><br/>
                 <code style="color:#818CF8;">POST /api/threat-query/chat</code>
             </div>
             <div class="item">
-                <b>🌐 Threat Subgraph</b><br/>
+                <b>Threat Subgraph</b><br/>
                 <code style="color:#38BDF8;">POST /api/threat-query</code>
             </div>
         </div>

@@ -104,13 +104,13 @@ USER QUERY:
 
 OUTPUT STRUCTURE (Follow this exact GitHub-flavored Markdown structure):
 
-### 🚨 CTI ADVISORY: {query[:75]}
+### CTI ADVISORY: {query[:75]}
 **Advisory Tracking:** `CISA-AA26-0924-CTI` | **TLP Classification:** `TLP:AMBER+STRICT`  
 **Threat Level:** `CRITICAL (CVSS 10.0 / EPSS 97.4%)` | **Target Scope:** Production Cloud Infrastructure  
 
 ---
 
-### 1. 📋 Threat Landscape & Incident Scorecard
+### 1. Threat Landscape & Incident Scorecard
 Create a detailed Markdown Table:
 | Intelligence Metric | Technical Assessment Value |
 | :--- | :--- |
@@ -125,39 +125,39 @@ Create a detailed Markdown Table:
 
 ---
 
-### 2. 🔬 Threat Actor Attribution & MITRE ATT&CK Profile
+### 2. Threat Actor Attribution & MITRE ATT&CK Profile
 - **Adversary Dossier**: Identity, operational origin (e.g. SVR, RGB, Cybercrime Cartel), known historical campaigns.
 - **Weaponized MITRE Techniques**: Detail technique IDs (e.g. T1190, T1195.002, T1078.004) and how the adversary chains them.
 
 ---
 
-### 3. ⚙️ Deep Technical Exploitation Mechanics & Kill Chain Trace
+### 3. Deep Technical Exploitation Mechanics & Kill Chain Trace
 - **Protocol & Memory Exploitation**: Step-by-step technical breakdown of how the exploit functions at the protocol, process, and memory layer (e.g., JNDI lookup evaluation over LDAP/RMI, ClassLoader variable binding override, M4 build macro injection).
 - **Directional Attack Path Vector**:
   ```
-  [Threat Actor] ➔ [MITRE Technique] ➔ [CVE] ➔ [Vulnerable Dependency] ➔ [Ingress Gateway] ➔ [Lateral Core DB]
+  [Threat Actor] ──► [MITRE Technique] ──► [CVE] ──► [Vulnerable Dependency] ──► [Ingress Gateway] ──► [Lateral Core DB]
   ```
 
 ---
 
-### 4. 💥 Production Blast Radius & Lateral Movement Topology
+### 4. Production Blast Radius & Lateral Movement Topology
 - **Direct Perimeter Foothold**: Compromised ingress container/host, environment secrets, and IAM role tokens.
 - **Lateral Pivot Pathways**: Exact traversal from perimeter ingress to internal core assets (e.g. Active Directory, Payment Processing, Database clusters).
 - **Compliance & Business Impact**: PCI-DSS breach, IAM privilege escalation, or ransomware impact.
 
 ---
 
-### 5. 🛡️ Tactical Indicators of Compromise (IOCs) & Detection Signatures
+### 5. Tactical Indicators of Compromise (IOCs) & Detection Signatures
 - **File / Payload Hashes (SHA256)**: Realistically formatted malicious payload hashes.
 - **Network C2 Indicators**: Malicious IP, C2 domain, and protocol ports.
 - **Sigma / YARA Detection Rule**: Provide a formatted code-block containing a realistic Sigma or Snort detection signature.
 
 ---
 
-### 6. 🛠️ Actionable Incident Response & Remediation Playbook
-- **⚡ Phase 1: Immediate Triage (0 - 60 Minutes)**: Exact firewall/iptables egress block commands and JVM runtime hotfix flags.
-- **📦 Phase 2: Upstream Patching & Container Rollout (1 - 24 Hours)**: Exact package version, `kubectl set image` or package manager commands.
-- **🔒 Phase 3: Zero-Trust Defense-in-Depth (24 - 72 Hours)**: mTLS enforcement, VPC microsegmentation, read-only root filesystems, and IAM credential rotation.
+### 6. Actionable Incident Response & Remediation Playbook
+- **Phase 1: Immediate Triage (0 - 60 Minutes)**: Exact firewall/iptables egress block commands and JVM runtime hotfix flags.
+- **Phase 2: Upstream Patching & Container Rollout (1 - 24 Hours)**: Exact package version, `kubectl set image` or package manager commands.
+- **Phase 3: Zero-Trust Defense-in-Depth (24 - 72 Hours)**: mTLS enforcement, VPC microsegmentation, read-only root filesystems, and IAM credential rotation.
 """
 
     if client:
@@ -214,28 +214,28 @@ USER QUERY:
 {query}
 
 OUTPUT STRUCTURE:
-### 🚨 CTI ADVISORY: {query[:75]}
+### CTI ADVISORY: {query[:75]}
 **Advisory Tracking:** `CISA-AA26-0924-CTI` | **TLP Classification:** `TLP:AMBER+STRICT`  
 **Threat Level:** `CRITICAL (CVSS 10.0 / EPSS 97.4%)` | **Target Scope:** Production Cloud Infrastructure  
 
 ---
 
-### 1. 📋 Threat Landscape & Incident Scorecard
+### 1. Threat Landscape & Incident Scorecard
 [Scorecard Table + Executive Summary]
 
-### 2. 🔬 Threat Actor Attribution & MITRE ATT&CK Profile
+### 2. Threat Actor Attribution & MITRE ATT&CK Profile
 [Adversary Dossier + MITRE IDs]
 
-### 3. ⚙️ Deep Technical Exploitation Mechanics & Kill Chain Trace
+### 3. Deep Technical Exploitation Mechanics & Kill Chain Trace
 [Protocol breakdown + Directional ASCII chain]
 
-### 4. 💥 Production Blast Radius & Lateral Movement Topology
+### 4. Production Blast Radius & Lateral Movement Topology
 [Perimeter breach + CAN_PIVOT_TO targets + Mission impact]
 
-### 5. 🛡️ Tactical Indicators of Compromise (IOCs) & Detection Signatures
+### 5. Tactical Indicators of Compromise (IOCs) & Detection Signatures
 [Hashes + C2 IPs + Suricata Rule + Sigma SIEM Rule]
 
-### 6. 🛠️ Actionable Incident Response & Remediation Playbook
+### 6. Actionable Incident Response & Remediation Playbook
 [Phase 1 immediate iptables + Phase 2 kubectl patch + Phase 3 Zero-Trust]
 """
 
@@ -450,15 +450,15 @@ def generate_deterministic_report(facts: List[str], query: str) -> str:
     vuln_patch = vuln_info["patch_version"]
     vuln_sha256 = vuln_info["sha256"]
 
-    return f"""### 🚨 CTI ADVISORY: {actor_name} Multi-Hop Attack Path
+    return f"""### CTI ADVISORY: {actor_name} Multi-Hop Attack Path
 **Advisory Tracking:** `CISA-AA26-0924-CTI` | **TLP Classification:** `TLP:AMBER+STRICT`  
 **Threat Severity:** `CRITICAL (CVSS {vuln_cvss} | EPSS {vuln_epss})`  
 **CISA KEV Status:** `{vuln_cisa}`  
-**Affected Target Scope:** Ingress Perimeter (`{ingress_svc}`) ➔ Internal Core (`{downstream_svc}`)  
+**Affected Target Scope:** Ingress Perimeter (`{ingress_svc}`) ──► Internal Core (`{downstream_svc}`)  
 
 ---
 
-### 1. 📋 Threat Landscape & Incident Scorecard
+### 1. Threat Landscape & Incident Scorecard
 
 | Intelligence Metric | Technical Assessment Value |
 | :--- | :--- |
@@ -476,7 +476,7 @@ def generate_deterministic_report(facts: List[str], query: str) -> str:
 
 ---
 
-### 2. 🔬 Threat Actor Attribution & MITRE ATT&CK Profile
+### 2. Threat Actor Attribution & MITRE ATT&CK Profile
 
 * **Threat Actor:** `{actor_name}` (MITRE Group ID: `{actor_mitre}`)
 * **Attributed Threat Origin:** {actor_sponsor}
@@ -488,7 +488,7 @@ def generate_deterministic_report(facts: List[str], query: str) -> str:
 
 ---
 
-### 3. ⚙️ Deep Technical Exploitation Mechanics & Kill Chain Trace
+### 3. Deep Technical Exploitation Mechanics & Kill Chain Trace
 
 ```
 [Adversary: {actor_name}]
@@ -524,7 +524,7 @@ def generate_deterministic_report(facts: List[str], query: str) -> str:
 
 ---
 
-### 4. 💥 Production Blast Radius & Lateral Movement Topology
+### 4. Production Blast Radius & Lateral Movement Topology
 
 * **Direct Perimeter Foothold:** **`{ingress_svc}`**  
   *Exposed in public DMZ (`10.100.1.0/24`). Attacker gains full shell access, processes environment variables, and extracts AWS/GCP cloud service account credentials.*
@@ -534,7 +534,7 @@ def generate_deterministic_report(facts: List[str], query: str) -> str:
 
 ---
 
-### 5. 🛡️ Tactical Indicators of Compromise (IOCs) & Detection Signatures
+### 5. Tactical Indicators of Compromise (IOCs) & Detection Signatures
 
 #### A. Network & Host IOCs
 - **Malicious C2 IP:** `{actor_c2_ip}`
@@ -573,9 +573,9 @@ level: critical
 
 ---
 
-### 6. 🛠️ Actionable Incident Response & Remediation Playbook
+### 6. Actionable Incident Response & Remediation Playbook
 
-##### ⚡ Phase 1: Immediate Triage (0 - 60 Minutes)
+##### Phase 1: Immediate Triage (0 - 60 Minutes)
 1. **Network Egress Block:** Immediately drop outbound connections from `{ingress_svc}` pods to unauthorized ports:
    ```bash
    # Block outbound LDAP, RMI, and raw egress from ingress namespace
@@ -587,7 +587,7 @@ level: critical
    {vuln_hotfix}
    ```
 
-##### 📦 Phase 2: Upstream Patching & Container Rollout (1 - 24 Hours)
+##### Phase 2: Upstream Patching & Container Rollout (1 - 24 Hours)
 1. **Deploy Prescribed Patch:** **`{vuln_patch}`**
 2. **Execute Kubernetes Rollout:**
    ```bash
@@ -596,7 +596,7 @@ level: critical
    ```
 3. **Credential Invalidation:** Revoke all AWS IAM temporary session credentials, database tokens, and mTLS certificates held by `{ingress_svc}`.
 
-##### 🔒 Phase 3: Zero-Trust Defense-in-Depth (24 - 72 Hours)
+##### Phase 3: Zero-Trust Defense-in-Depth (24 - 72 Hours)
 - Enforce Kubernetes `NetworkPolicy` isolating `{ingress_svc}` from `{downstream_svc}` except over strictly authenticated mTLS gRPC endpoints.
 - Deploy read-only root filesystems (`securityContext.readOnlyRootFilesystem: true`) and drop all unnecessary Linux capabilities (`CAP_NET_RAW`, `CAP_SYS_ADMIN`).
 """
@@ -690,7 +690,7 @@ def generate_deterministic_copilot_reply(question: str, facts: List[str]) -> str
     services = ", ".join(parsed["services"]) if parsed["services"] else "k8s-auth-ingress-gateway"
 
     if any(k in q_low for k in ["event", "log", "detect", "sysmon", "siem"]):
-        return f"""### 🔍 SOC Forensic Telemetry & Event Detection Matrix
+        return f"""### SOC Forensic Telemetry & Event Detection Matrix
 
 To detect active adversary movement by **{actors}** exploiting **{cves}** across `{services}`, monitor the following telemetry sources:
 
@@ -708,7 +708,7 @@ index=k8s_audit action=exec pod_name="*{services.split(',')[0]}*"
 ```"""
 
     elif any(k in q_low for k in ["firewall", "iptables", "quarantine", "contain", "block", "isolate"]):
-        return f"""### 🛡️ Tactical Ingress Containment & Emergency Network Rule
+        return f"""### Tactical Ingress Containment & Emergency Network Rule
 
 To immediately sever the adversary's lateral movement channel without completely taking `{services}` offline:
 
@@ -728,7 +728,7 @@ To immediately sever the adversary's lateral movement channel without completely
    Immediately terminate active sessions and cycle JWT signing secrets on the auth gateway."""
 
     elif any(k in q_low for k in ["blast", "impact", "crown", "vault", "business"]):
-        return f"""### 💥 Operational Blast Radius & Business Impact Assessment
+        return f"""### Operational Blast Radius & Business Impact Assessment
 
 Based on the verified Neo4j attack graph path:
 * **Initial Breach Point:** `{services}`
@@ -740,7 +740,7 @@ Based on the verified Neo4j attack graph path:
 * **Containment Recommendation:** Isolate the ingress gateway pod immediately to enforce zero-trust segmentation before credential dumping occurs."""
 
     else:
-        return f"""### 📋 Incident Analysis: {question}
+        return f"""### Incident Analysis: {question}
 
 Based on verified graph evidence for **{actors}** targeting **{services}** via **{cves}**:
 * **Attack Chain Status:** Multi-hop path confirmed from external ingress to internal tier assets.

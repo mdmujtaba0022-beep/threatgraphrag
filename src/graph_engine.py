@@ -366,7 +366,7 @@ def simulate_countermeasure(
             visual_edges.append({
                 "from": src,
                 "to": tgt,
-                "label": f"🚫 [BLOCKED] {lbl}",
+                "label": f"[BLOCKED] {lbl}",
                 "color": {"color": "#DC2626", "highlight": "#EF4444"},
                 "dashes": True,
                 "width": 3
@@ -408,7 +408,7 @@ def simulate_countermeasure(
     visual_nodes = {}
     for n, lbl in new_nodes_dict.items():
         if clean_target.lower() in n.lower():
-            status_tag = "🛡️ MITIGATED" if action_type == "patch" else "🔒 QUARANTINED"
+            status_tag = "MITIGATED" if action_type == "patch" else "QUARANTINED"
             visual_nodes[n] = f"{lbl} ({status_tag})"
         else:
             visual_nodes[n] = lbl
@@ -715,13 +715,13 @@ def compute_graph_chokepoints(
         
         # Determine operational mitigation action
         if lbl in ["Vulnerability", "SoftwarePackage"]:
-            rec_action = "🛡️ Patch Flaw / Upgrade Dependency"
+            rec_action = "Patch Flaw / Upgrade Dependency"
             friction_cost = "Low (Software Patch)"
         elif lbl == "EnterpriseService":
-            rec_action = "🔒 Zero-Trust Ingress / Pod Isolation"
+            rec_action = "Zero-Trust Ingress / Pod Isolation"
             friction_cost = "Medium (Network Quarantine)"
         else:
-            rec_action = "⚡ Block MITRE TTP Signature"
+            rec_action = "Block MITRE TTP Signature"
             friction_cost = "Low (SIEM / Firewall Rule)"
 
         chokepoint_rankings.append({
