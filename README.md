@@ -110,10 +110,14 @@ python -m uvicorn api:app --reload --port 8000
 Visit **`http://localhost:8000/docs`** for interactive Swagger API documentation.
 
 #### Key API Endpoints:
-* `POST /api/scan-github-repo`: Scans external GitHub repositories (or raw manifests) for zero-days, APT campaigns, and lateral movement blast radius.
-* `GET /api/github-presets`: Retrieves preconfigured vulnerable & secure repository scenarios for quick demonstration.
+* `GET /`: Interactive API Gateway Dashboard (auto-redirects to `/docs`).
+* `POST /api/graph/chokepoint-analysis`: Computes graph-theoretic cut-vertices, betweenness centrality, and Bayesian Time-to-Compromise (TTC).
+* `POST /api/countermeasure/simulate`: Simulates vulnerability patching or pod isolation, verifying kill-chain severance and generating deployable Sigma/K8s/bash defense playbooks.
+* `POST /api/threat-query/chat`: Multi-turn conversational SOC Forensics Copilot for interactive graph Q&A.
+* `POST /api/threat-query`: Multi-hop attack path reasoning and executive SOC advisory report.
+* `POST /api/threat-query-stream`: Real-time token-by-token SSE streaming for SOC report generation.
+* `POST /api/scan-github-repo`: Scans external GitHub repositories for zero-days, APT campaigns, and lateral movement blast radius.
 * `POST /api/scan-sbom`: Audits CycloneDX / enterprise SBOM dependencies against the CTI graph.
-* `POST /api/threat-query`: Multi-hop attack path reasoning and executive SOC advisory.
 * `GET /api/blast-radius?target=Customer-Auth-Service`: Calculates lateral movement risk and compromised microservices.
 * `GET /api/graph-summary`: Returns tracked threat actors, critical CVEs, and enterprise services.
 * `GET /health`: Health-check monitoring database and model connectivity.
@@ -148,7 +152,21 @@ docker-compose up --build
 
 ---
 
-## 🧪 Running the Scientific Benchmark Suite
+## 🧪 Running the Test & Benchmark Suites
+
+### 1. Algorithmic Chokepoints & Playbook Unit Tests
+```powershell
+python test_chokepoints.py
+```
+Validates mathematical S-T articulation points, Bayesian exploitability, and auto-generated Sigma/K8s/bash defense playbooks.
+
+### 2. Semantic Cache & SSE Token Streaming Tests
+```powershell
+python test_cache_stream.py
+```
+Verifies TTL caching, token savings telemetry, and server-sent event streaming.
+
+### 3. Scientific Benchmark Suite (LLM-as-a-Judge)
 ```powershell
 python evaluate_threat_rag.py
 ```

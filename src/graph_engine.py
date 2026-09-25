@@ -381,10 +381,12 @@ def simulate_countermeasure(
         adj[e["from"]].append(e["to"])
         
     crown_jewels = before_metrics["crown_jewels_at_risk"]
-    ingress_points = before_metrics["ingress_entry_points"] or [n for n, l in nodes_dict.items() if l in ["ThreatActor", "Vulnerability"]]
+    threat_sources = before_metrics["adversaries_tracked"] or [n for n, l in nodes_dict.items() if l in ["ThreatActor", "Vulnerability"]]
+    if not threat_sources:
+        threat_sources = before_metrics["ingress_entry_points"] or list(nodes_dict.keys())[:1]
     
     reachable_jewels = set()
-    for start_node in ingress_points:
+    for start_node in threat_sources:
         visited = set()
         queue = collections.deque([start_node])
         while queue:
