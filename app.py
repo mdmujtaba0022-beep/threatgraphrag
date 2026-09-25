@@ -94,7 +94,8 @@ from src.graph_engine import (
     extract_cyber_entities,
     fetch_precision_threat_graph,
     calculate_graph_threat_metrics,
-    simulate_countermeasure
+    simulate_countermeasure,
+    compute_graph_chokepoints
 )
 
 # Schemas
@@ -141,8 +142,7 @@ def get_node_level(label: str, name: str, props: dict) -> int:
         return 7
     return 4
 
-# 2D Attack Graph Visualization with Vis.js (Tactical Cybersecurity Console)
-def render_attack_graph(nodes_dict, edges, nodes_meta=None, graph_height=720):
+def render_attack_graph(nodes_dict, edges, nodes_meta=None, graph_height=720, chokepoint_node=None):
     theme = {
         "GitHubRepo": {
             "bg": "#2E1065", "border": "#A855F7", "highlight": "#9333EA",
@@ -266,25 +266,38 @@ def render_attack_graph(nodes_dict, edges, nodes_meta=None, graph_height=720):
             clean_n = name[:26] + "..." if len(name) > 26 else name
             display_label = f"[{style['badge'].upper()}]\n{style['icon']} {clean_n}"
             
+        is_chokepoint = bool(chokepoint_node and (chokepoint_node.lower() == name.lower() or chokepoint_node.lower() in name.lower()))
+        if is_chokepoint:
+            display_label = f"🎯 [CHOKEPOINT]\n" + display_label
+
+        node_bg = "#78350F" if is_chokepoint else style["bg"]
+        node_border = "#F59E0B" if is_chokepoint else style["border"]
+        node_highlight_bg = "#92400E" if is_chokepoint else style["highlight"]
+        node_highlight_border = "#FBBF24" if is_chokepoint else "#FFFFFF"
+        node_border_width = 4 if is_chokepoint else 2
+        node_shadow_color = "#F59E0B" if is_chokepoint else "rgba(0,0,0,0.6)"
+        node_shadow_size = 18 if is_chokepoint else 10
+        node_font_color = "#FEF08A" if is_chokepoint else "#F8FAFC"
+            
         vis_nodes.append({
             "id": name,
             "label": display_label,
             "level": level,
-            "title": f"<b>[{label}]</b> {name}",
+            "title": f"<b>[{label}]</b> {name}" + ("<br><b><span style='color:#F59E0B;'>🎯 CRITICAL GRAPH CHOKEPOINT</span></b>" if is_chokepoint else ""),
             "color": {
-                "background": style["bg"],
-                "border": style["border"],
+                "background": node_bg,
+                "border": node_border,
                 "highlight": {
-                    "background": style["highlight"],
-                    "border": "#FFFFFF"
+                    "background": node_highlight_bg,
+                    "border": node_highlight_border
                 },
                 "hover": {
-                    "background": style["highlight"],
-                    "border": "#FFFFFF"
+                    "background": node_highlight_bg,
+                    "border": node_highlight_border
                 }
             },
             "font": {
-                "color": "#F8FAFC",
+                "color": node_font_color,
                 "size": 11,
                 "face": "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
                 "align": "center"
@@ -294,12 +307,12 @@ def render_attack_graph(nodes_dict, edges, nodes_meta=None, graph_height=720):
             "shapeProperties": {
                 "borderRadius": 6
             },
-            "borderWidth": 2,
-            "borderWidthSelected": 3,
+            "borderWidth": node_border_width,
+            "borderWidthSelected": 4 if is_chokepoint else 3,
             "shadow": {
                 "enabled": True,
-                "color": "rgba(0,0,0,0.6)",
-                "size": 10,
+                "color": node_shadow_color,
+                "size": node_shadow_size,
                 "x": 2,
                 "y": 2
             }
@@ -1911,6 +1924,78 @@ with container_graph:
     </div>
     """, unsafe_allow_html=True)
     if "edges" in st.session_state and st.session_state["edges"]:
+        # Algorithmic Chokepoint & Quantitative Risk Computation
+        chokepoint_data = compute_graph_chokepoints(
+            st.session_state["nodes_dict"],
+            st.session_state["edges"],
+            st.session_state.get("nodes_meta", {})
+        )
+        st.session_state["chokepoint_data"] = chokepoint_data
+        primary_chokepoint = chokepoint_data.get("primary_chokepoint")
+        risk_mod = chokepoint_data.get("risk_modeling", {})
+
+        # Chokepoint & Quantitative Risk Analysis Panel
+        with st.expander("🎯 Algorithmic Chokepoint & Quantitative Risk Engine (Graph Theory)", expanded=True):
+            st.markdown("""
+            <div style="font-size: 13px; color: #94A3B8; margin-bottom: 12px;">
+                Identifies graph-theoretic <b>S-T Articulation Points (Cut-Vertices)</b> and computes <b>Bayesian cumulative exploitability</b> across all discovered attack paths leading to Tier-0 crown jewels.
+            </div>
+            """, unsafe_allow_html=True)
+            
+            cp_col1, cp_col2, cp_col3, cp_col4 = st.columns(4)
+            is_perfect_cut = chokepoint_data.get("is_perfect_cut", False)
+            p_breach = risk_mod.get("cumulative_breach_probability", 95.0)
+            ttc_display = risk_mod.get("fastest_time_to_compromise", "~20m")
+            active_paths_count = chokepoint_data.get("total_active_paths", 0)
+
+            cp_col1.metric(
+                "Primary Chokepoint",
+                primary_chokepoint or "None Identified",
+                delta="🎯 Perfect Cut-Vertex" if is_perfect_cut else "Bridge Pivot"
+            )
+            cp_col2.metric(
+                "Cumulative Breach Prob",
+                f"{p_breach}%",
+                delta="CVSS/EPSS Bayesian Risk",
+                delta_color="inverse"
+            )
+            cp_col3.metric(
+                "Est. Time-to-Compromise",
+                ttc_display,
+                delta=risk_mod.get("exploit_maturity_tier", "WEAPONIZED")
+            )
+            cp_col4.metric(
+                "Active Kill-Chain Paths",
+                active_paths_count,
+                delta="Direct Traversal Paths"
+            )
+
+            if primary_chokepoint:
+                rankings = chokepoint_data.get("chokepoint_rankings", [])
+                top_cut_pct = rankings[0].get("severance_percentage", 100.0) if rankings else 100.0
+                st.markdown(f"""
+                <div style="background: rgba(245, 158, 11, 0.08); border-left: 3px solid #F59E0B; padding: 10px 14px; border-radius: 4px; font-size: 13px; color: #F8FAFC; margin: 8px 0 14px 0;">
+                    <b style="color: #FBBF24;">🎯 Tactical Chokepoint Strategy:</b> Neutralizing <b><code>{primary_chokepoint}</code></b> severs <b>{top_cut_pct}%</b> of all active adversary traversals to Tier-0 assets. Highlighted with a golden halo on the graph canvas.
+                </div>
+                """, unsafe_allow_html=True)
+
+                if rankings:
+                    st.markdown("###### 📊 Mathematically Ranked Intervention Priorities")
+                    import pandas as pd
+                    df_rankings = pd.DataFrame([
+                        {
+                            "Node": r["node"],
+                            "Entity Type": r["label"],
+                            "Path Severance": f"{r['severance_percentage']}%",
+                            "Betweenness Centrality": r["betweenness_score"],
+                            "Articulation Point": "🎯 Cut-Vertex" if r["is_articulation_point"] else "Bridge",
+                            "Recommended Countermeasure": r["recommended_action"],
+                            "Friction Cost": r["operational_friction"]
+                        }
+                        for r in rankings
+                    ])
+                    st.dataframe(df_rankings, use_container_width=True, hide_index=True)
+
         # Extract candidate mitigation targets (CVEs, Services, Packages)
         nodes_dict = st.session_state["nodes_dict"]
         cve_candidates = [n for n, l in nodes_dict.items() if l == "Vulnerability"]
@@ -1930,7 +2015,10 @@ with container_graph:
             
             col_sim_target, col_sim_action, col_sim_btn = st.columns([1.6, 1.2, 0.9])
             with col_sim_target:
-                target_choice = st.selectbox("Select Target Node to Mitigate:", all_candidates, key="cm_target_select")
+                default_target_idx = 0
+                if primary_chokepoint and primary_chokepoint in all_candidates:
+                    default_target_idx = all_candidates.index(primary_chokepoint)
+                target_choice = st.selectbox("Select Target Node to Mitigate:", all_candidates, index=default_target_idx, key="cm_target_select")
             with col_sim_action:
                 default_act_idx = 0 if any(flaw in str(target_choice) for flaw in ["CVE-", "log4j", "xz-utils", "fortios", "spring"]) else 1
                 action_mode = st.radio("Mitigation Action:", ["🛡️ Patch Vulnerability", "🔒 Isolate Pod / Host"], index=default_act_idx, horizontal=True, key="cm_action_mode")
@@ -2020,8 +2108,8 @@ with container_graph:
             graph_edges = st.session_state["countermeasure_sim"]["visual_edges"]
             st.caption(f"Showing attack path with **Simulated Countermeasure applied on `{st.session_state['countermeasure_sim']['target_entity']}`** • (Red dashed edges indicate `[BLOCKED]` hops)")
         else:
-            st.caption(f"Showing attack path for: {', '.join(st.session_state.get('entities', []))} • (Click node to inspect • 📷 Export PNG or 📥 Export JSON in top toolbar)")
+            st.caption(f"Showing attack path for: {', '.join(st.session_state.get('entities', []))} • (🎯 Golden halo highlights primary articulation point `{primary_chokepoint}` • Click node to inspect • 📷 Export PNG or 📥 Export JSON in top toolbar)")
             
-        render_attack_graph(graph_nodes, graph_edges, graph_meta, graph_height=700)
+        render_attack_graph(graph_nodes, graph_edges, graph_meta, graph_height=700, chokepoint_node=primary_chokepoint)
     else:
         st.info("Execute a threat scenario on the left to visualize the attack path and lateral movement graph!")

@@ -24,7 +24,12 @@ from src.report_generator import (
     synthesize_copilot_followup
 )
 from src.cache_manager import threat_cache
-from src.graph_engine import extract_cyber_entities, fetch_precision_threat_graph, simulate_countermeasure
+from src.graph_engine import (
+    extract_cyber_entities,
+    fetch_precision_threat_graph,
+    simulate_countermeasure,
+    compute_graph_chokepoints
+)
 
 load_dotenv()
 
@@ -170,6 +175,27 @@ def calculate_blast_radius(target: str = Query(..., description="Service name or
         lateral_movement_paths=paths,
         severity_level="CRITICAL" if any("10.0" in c for c in cves) else "HIGH"
     )
+
+class ChokepointAnalysisRequest(BaseModel):
+    entities: List[str] = Field(..., example=["APT29", "k8s-auth-ingress-gateway"])
+
+@app.post("/api/graph/chokepoint-analysis", tags=["Security Analysis"])
+def analyze_graph_chokepoints(request: ChokepointAnalysisRequest):
+    """
+    Computes graph-theoretic Articulation Points (Cut-Vertices), Betweenness Centrality,
+    and Bayesian Time-to-Compromise (TTC) for the specified threat entities.
+    """
+    facts, nodes_dict, edges, nodes_meta, metrics = fetch_precision_threat_graph(driver, request.entities)
+    if not nodes_dict:
+        raise HTTPException(status_code=404, detail="No attack graph nodes found for requested entities.")
+    analysis = compute_graph_chokepoints(nodes_dict, edges, nodes_meta)
+    return {
+        "primary_chokepoint": analysis["primary_chokepoint"],
+        "is_perfect_cut": analysis["is_perfect_cut"],
+        "total_active_paths": analysis["total_active_paths"],
+        "chokepoint_rankings": analysis["chokepoint_rankings"],
+        "risk_modeling": analysis["risk_modeling"]
+    }
 
 @app.post("/api/countermeasure/simulate", response_model=CountermeasureResponse, tags=["Active Defense & SOAR"])
 def simulate_defense_countermeasure(request: CountermeasureRequest):
