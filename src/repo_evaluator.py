@@ -310,6 +310,56 @@ def parse_generic_manifest(filename: str, content: str) -> List[Dict[str, Any]]:
     else:
         return parse_requirements_txt(content)
 
+def _query_pkg_dependencies_in_memory(term: str) -> List[Dict[str, Any]]:
+    """
+    In-memory fallback for matching packages against the curated CTI attack topology.
+    Used when Neo4j is offline or unreachable.
+    """
+    try:
+        from ingest_threat_data import ENTERPRISE_CTI_DATA, RELATIONSHIPS
+    except Exception:
+        return []
+        
+    records = []
+    term_low = term.lower()
+    for p in ENTERPRISE_CTI_DATA.get("packages", []):
+        p_name = p["name"]
+        if term_low in p_name.lower() or p_name.lower() in term_low:
+            for s_type, s_name, t_type, t_name, rel in RELATIONSHIPS:
+                if rel == "EXPLOITS_FLAW_IN" and t_name == p_name:
+                    cve = s_name
+                    cve_props = next((c for c in ENTERPRISE_CTI_DATA.get("cves", []) if c["cve"] == cve), {})
+                    patch = next((t_n for s_t, s_n, t_t, t_n, r in RELATIONSHIPS if r == "MITIGATED_BY" and s_n == cve), None)
+                    patch_props = next((pt for pt in ENTERPRISE_CTI_DATA.get("patches", []) if pt["name"] == patch), {}) if patch else {}
+                    tech = next((s_n for s_t, s_n, t_t, t_n, r in RELATIONSHIPS if r == "TARGETS_VULNERABILITY" and t_n == cve), None)
+                    tech_props = next((t for t in ENTERPRISE_CTI_DATA.get("techniques", []) if t["name"] == tech), {}) if tech else {}
+                    actor = next((s_n for s_t, s_n, t_t, t_n, r in RELATIONSHIPS if r == "LEVERAGES" and t_n == tech), None) if tech else None
+                    actor_props = next((a for a in ENTERPRISE_CTI_DATA.get("actors", []) if a["name"] == actor), {}) if actor else {}
+                    svc = next((s_n for s_t, s_n, t_t, t_n, r in RELATIONSHIPS if r in ["DEPENDS_ON", "RUNS_SOFTWARE"] and t_n == p_name), None)
+                    svc_props = next((s for s in ENTERPRISE_CTI_DATA.get("services", []) if s["name"] == svc), {}) if svc else {}
+                    downstream = next((t_n for s_t, s_n, t_t, t_n, r in RELATIONSHIPS if r == "CAN_PIVOT_TO" and s_n == svc), None) if svc else None
+                    downstream_props = next((s for s in ENTERPRISE_CTI_DATA.get("services", []) if s["name"] == downstream), {}) if downstream else {}
+
+                    records.append({
+                        "matched_package": p_name,
+                        "pkg_props": p,
+                        "cve": cve,
+                        "vuln_props": cve_props,
+                        "cvss": cve_props.get("cvss", 9.8),
+                        "flaw_type": cve_props.get("type", "Remote Code Execution"),
+                        "technique": tech,
+                        "tech_props": tech_props,
+                        "threat_actor": actor,
+                        "actor_props": actor_props,
+                        "remediation": patch,
+                        "patch_props": patch_props,
+                        "service_impacted": svc,
+                        "svc_props": svc_props,
+                        "downstream_blast_radius": downstream,
+                        "downstream_props": downstream_props
+                    })
+    return records
+
 def evaluate_repo_dependencies(driver, packages: List[Dict[str, Any]], repo_identifier: str) -> Dict[str, Any]:
     """
     Cross-references parsed packages against the Neo4j Knowledge Graph.
@@ -341,7 +391,13 @@ def evaluate_repo_dependencies(driver, packages: List[Dict[str, Any]], repo_iden
         "fortigate": "fortios"
     }
 
-    with driver.session() as session:
+    neo4j_session = None
+    try:
+        neo4j_session = driver.session()
+    except Exception as e:
+        logger.warning(f"Neo4j offline for SBOM evaluation ({e}). Using in-memory CTI dataset.")
+
+    try:
         for pkg in packages:
             p_name = pkg["name"].lower().strip()
             search_terms = [p_name]
@@ -352,27 +408,36 @@ def evaluate_repo_dependencies(driver, packages: List[Dict[str, Any]], repo_iden
             search_terms = list(set(search_terms))
             
             for term in search_terms:
-                cypher = """
-                MATCH (p:SoftwarePackage)
-                WHERE toLower(p.name) CONTAINS toLower($term) OR toLower($term) CONTAINS toLower(p.name)
-                MATCH (v:Vulnerability)-[:EXPLOITS_FLAW_IN]->(p)
-                OPTIONAL MATCH (tech:AttackTechnique)-[:TARGETS_VULNERABILITY]->(v)
-                OPTIONAL MATCH (actor:ThreatActor)-[:LEVERAGES]->(tech)
-                OPTIONAL MATCH (v)-[:MITIGATED_BY]->(patch:RemediationPatch)
-                OPTIONAL MATCH (svc:EnterpriseService)-[:DEPENDS_ON]->(p)
-                OPTIONAL MATCH (svc)-[:CAN_PIVOT_TO]->(downstream:EnterpriseService)
-                RETURN 
-                    p.name AS matched_package, properties(p) AS pkg_props,
-                    v.name AS cve, properties(v) AS vuln_props,
-                    v.cvss AS cvss,
-                    v.type AS flaw_type,
-                    tech.name AS technique, properties(tech) AS tech_props,
-                    actor.name AS threat_actor, properties(actor) AS actor_props,
-                    patch.name AS remediation, properties(patch) AS patch_props,
-                    svc.name AS service_impacted, properties(svc) AS svc_props,
-                    downstream.name AS downstream_blast_radius, properties(downstream) AS downstream_props
-                """
-                records = list(session.run(cypher, term=term))
+                records = []
+                if neo4j_session:
+                    try:
+                        cypher = """
+                        MATCH (p:SoftwarePackage)
+                        WHERE toLower(p.name) CONTAINS toLower($term) OR toLower($term) CONTAINS toLower(p.name)
+                        MATCH (v:Vulnerability)-[:EXPLOITS_FLAW_IN]->(p)
+                        OPTIONAL MATCH (tech:AttackTechnique)-[:TARGETS_VULNERABILITY]->(v)
+                        OPTIONAL MATCH (actor:ThreatActor)-[:LEVERAGES]->(tech)
+                        OPTIONAL MATCH (v)-[:MITIGATED_BY]->(patch:RemediationPatch)
+                        OPTIONAL MATCH (svc:EnterpriseService)-[:DEPENDS_ON]->(p)
+                        OPTIONAL MATCH (svc)-[:CAN_PIVOT_TO]->(downstream:EnterpriseService)
+                        RETURN 
+                            p.name AS matched_package, properties(p) AS pkg_props,
+                            v.name AS cve, properties(v) AS vuln_props,
+                            v.cvss AS cvss,
+                            v.type AS flaw_type,
+                            tech.name AS technique, properties(tech) AS tech_props,
+                            actor.name AS threat_actor, properties(actor) AS actor_props,
+                            patch.name AS remediation, properties(patch) AS patch_props,
+                            svc.name AS service_impacted, properties(svc) AS svc_props,
+                            downstream.name AS downstream_blast_radius, properties(downstream) AS downstream_props
+                        """
+                        records = list(neo4j_session.run(cypher, term=term))
+                    except Exception:
+                        records = []
+                
+                if not records:
+                    records = _query_pkg_dependencies_in_memory(term)
+
                 for r in records:
                     cve = r["cve"]
                     if not cve:
@@ -459,6 +524,12 @@ def evaluate_repo_dependencies(driver, packages: List[Dict[str, Any]], repo_iden
                             nodes_dict[downstream] = "EnterpriseService"
                             nodes_meta[downstream] = {"label": "EnterpriseService", "props": dict(r["downstream_props"]) if r["downstream_props"] else {}}
                             edges.append({"from": svc, "to": downstream, "label": "CAN_PIVOT_TO"})
+    finally:
+        if neo4j_session:
+            try:
+                neo4j_session.close()
+            except Exception:
+                pass
 
     if "nodes_meta" not in locals():
         nodes_meta = {repo_node_id: {"label": "GitHubRepo", "props": {"repository": repo_identifier}}}

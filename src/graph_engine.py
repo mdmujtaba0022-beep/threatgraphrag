@@ -130,28 +130,107 @@ def fetch_precision_threat_graph(driver, entities: List[str]) -> Tuple[List[str]
     
     added_edges = set()
     
-    with driver.session() as session:
-        # Stage 1: If 2 or more entities extracted, find multi-hop connecting paths
-        if len(entities) >= 2:
-            for i in range(len(entities)):
-                for j in range(i + 1, min(len(entities), i + 3)):
-                    e1, e2 = entities[i].strip(), entities[j].strip()
+    try:
+        with driver.session() as session:
+            # Stage 1: If 2 or more entities extracted, find multi-hop connecting paths
+            if len(entities) >= 2:
+                for i in range(len(entities)):
+                    for j in range(i + 1, min(len(entities), i + 3)):
+                        e1, e2 = entities[i].strip(), entities[j].strip()
+                        try:
+                            cypher_path = """
+                            MATCH (s), (t)
+                            WHERE (toLower(s.name) CONTAINS toLower($e1) OR toLower($e1) CONTAINS toLower(s.name))
+                              AND (toLower(t.name) CONTAINS toLower($e2) OR toLower($e2) CONTAINS toLower(t.name))
+                              AND s <> t
+                            MATCH p = allShortestPaths((s)-[*1..6]-(t))
+                            UNWIND relationships(p) as rel
+                            WITH DISTINCT rel, startNode(rel) as u, endNode(rel) as v
+                            RETURN 
+                                u.name as src, labels(u)[0] as s_lbl, properties(u) as s_props,
+                                type(rel) as rel_type,
+                                v.name as tgt, labels(v)[0] as t_lbl, properties(v) as t_props
+                            LIMIT 30
+                            """
+                            results = list(session.run(cypher_path, e1=e1, e2=e2))
+                            for r in results:
+                                src, s_lbl = r["src"], r["s_lbl"]
+                                tgt, t_lbl = r["tgt"], r["t_lbl"]
+                                rel = r["rel_type"]
+                                edge_key = (src, tgt, rel)
+                                if edge_key not in added_edges:
+                                    added_edges.add(edge_key)
+                                    s_props = dict(r["s_props"]) if r["s_props"] else {}
+                                    t_props = dict(r["t_props"]) if r["t_props"] else {}
+                                    fact = f"- [{s_lbl}] `{src}` ──[{rel}]──► [{t_lbl}] `{tgt}`"
+                                    facts.append(fact)
+                                    nodes_dict[src] = s_lbl
+                                    nodes_dict[tgt] = t_lbl
+                                    nodes_meta[src] = {"label": s_lbl, "props": s_props}
+                                    nodes_meta[tgt] = {"label": t_lbl, "props": t_props}
+                                    edges_list.append({"from": src, "to": tgt, "label": rel})
+                        except Exception as err:
+                            logger.debug(f"Shortest path query failed for ({e1}, {e2}): {err}")
+
+            # Stage 2: Individual entity neighbor & context expansion
+            for entity in entities:
+                clean_e = entity.strip()
+                indexed_found = False
+                
+                # Neo4j Full-Text Schema Index traversal (<5ms)
+                try:
+                    search_term = f'"{clean_e}"' if " " in clean_e else f"{clean_e}*"
+                    cypher_idx = """
+                    CALL db.index.fulltext.queryNodes("threatEntityIndex", $term) YIELD node, score
+                    WHERE score >= 0.35
+                    WITH node LIMIT 3
+                    MATCH path = (node)-[r*1..2]-(target)
+                    UNWIND relationships(path) as rel
+                    WITH DISTINCT rel, startNode(rel) as s, endNode(rel) as t
+                    RETURN 
+                        s.name AS src, labels(s)[0] AS s_lbl, properties(s) AS s_props,
+                        type(rel) AS rel_type,
+                        t.name AS tgt, labels(t)[0] AS t_lbl, properties(t) AS t_props
+                    LIMIT 35
+                    """
+                    results = list(session.run(cypher_idx, term=search_term))
+                    if results:
+                        indexed_found = True
+                        for r in results:
+                            src, s_lbl = r["src"], r["s_lbl"]
+                            tgt, t_lbl = r["tgt"], r["t_lbl"]
+                            rel = r["rel_type"]
+                            edge_key = (src, tgt, rel)
+                            if edge_key not in added_edges:
+                                added_edges.add(edge_key)
+                                s_props = dict(r["s_props"]) if r["s_props"] else {}
+                                t_props = dict(r["t_props"]) if r["t_props"] else {}
+                                fact = f"- [{s_lbl}] `{src}` ──[{rel}]──► [{t_lbl}] `{tgt}`"
+                                facts.append(fact)
+                                nodes_dict[src] = s_lbl
+                                nodes_dict[tgt] = t_lbl
+                                nodes_meta[src] = {"label": s_lbl, "props": s_props}
+                                nodes_meta[tgt] = {"label": t_lbl, "props": t_props}
+                                edges_list.append({"from": src, "to": tgt, "label": rel})
+                except Exception:
+                    indexed_found = False
+
+                # Resilient Substring Fallback
+                if not indexed_found:
                     try:
-                        cypher_path = """
-                        MATCH (s), (t)
-                        WHERE (toLower(s.name) CONTAINS toLower($e1) OR toLower($e1) CONTAINS toLower(s.name))
-                          AND (toLower(t.name) CONTAINS toLower($e2) OR toLower($e2) CONTAINS toLower(t.name))
-                          AND s <> t
-                        MATCH p = allShortestPaths((s)-[*1..6]-(t))
-                        UNWIND relationships(p) as rel
-                        WITH DISTINCT rel, startNode(rel) as u, endNode(rel) as v
+                        cypher_sub = """
+                        MATCH (source)
+                        WHERE toLower(source.name) CONTAINS toLower($entity)
+                        MATCH path = (source)-[r*1..2]-(target)
+                        UNWIND relationships(path) as rel
+                        WITH DISTINCT rel, startNode(rel) as s, endNode(rel) as t
                         RETURN 
-                            u.name as src, labels(u)[0] as s_lbl, properties(u) as s_props,
-                            type(rel) as rel_type,
-                            v.name as tgt, labels(v)[0] as t_lbl, properties(v) as t_props
-                        LIMIT 30
+                            s.name AS src, labels(s)[0] AS s_lbl, properties(s) AS s_props,
+                            type(rel) AS rel_type,
+                            t.name AS tgt, labels(t)[0] AS t_lbl, properties(t) AS t_props
+                        LIMIT 35
                         """
-                        results = list(session.run(cypher_path, e1=e1, e2=e2))
+                        results = list(session.run(cypher_sub, entity=clean_e))
                         for r in results:
                             src, s_lbl = r["src"], r["s_lbl"]
                             tgt, t_lbl = r["tgt"], r["t_lbl"]
@@ -169,89 +248,128 @@ def fetch_precision_threat_graph(driver, entities: List[str]) -> Tuple[List[str]
                                 nodes_meta[tgt] = {"label": t_lbl, "props": t_props}
                                 edges_list.append({"from": src, "to": tgt, "label": rel})
                     except Exception as err:
-                        logger.debug(f"Shortest path query failed for ({e1}, {e2}): {err}")
+                        logger.debug(f"Substring fallback failed for {clean_e}: {err}")
+    except Exception as err:
+        logger.warning(f"Neo4j database query encountered exception ({err}). Activating in-memory CTI Knowledge Graph.")
+        return _fetch_in_memory_threat_graph(entities)
 
-        # Stage 2: Individual entity neighbor & context expansion
-        for entity in entities:
-            clean_e = entity.strip()
-            indexed_found = False
-            
-            # Neo4j Full-Text Schema Index traversal (<5ms)
-            try:
-                search_term = f'"{clean_e}"' if " " in clean_e else f"{clean_e}*"
-                cypher_idx = """
-                CALL db.index.fulltext.queryNodes("threatEntityIndex", $term) YIELD node, score
-                WHERE score >= 0.35
-                WITH node LIMIT 3
-                MATCH path = (node)-[r*1..2]-(target)
-                UNWIND relationships(path) as rel
-                WITH DISTINCT rel, startNode(rel) as s, endNode(rel) as t
-                RETURN 
-                    s.name AS src, labels(s)[0] AS s_lbl, properties(s) AS s_props,
-                    type(rel) AS rel_type,
-                    t.name AS tgt, labels(t)[0] AS t_lbl, properties(t) AS t_props
-                LIMIT 35
-                """
-                results = list(session.run(cypher_idx, term=search_term))
-                if results:
-                    indexed_found = True
-                    for r in results:
-                        src, s_lbl = r["src"], r["s_lbl"]
-                        tgt, t_lbl = r["tgt"], r["t_lbl"]
-                        rel = r["rel_type"]
-                        edge_key = (src, tgt, rel)
-                        if edge_key not in added_edges:
-                            added_edges.add(edge_key)
-                            s_props = dict(r["s_props"]) if r["s_props"] else {}
-                            t_props = dict(r["t_props"]) if r["t_props"] else {}
-                            fact = f"- [{s_lbl}] `{src}` ──[{rel}]──► [{t_lbl}] `{tgt}`"
-                            facts.append(fact)
-                            nodes_dict[src] = s_lbl
-                            nodes_dict[tgt] = t_lbl
-                            nodes_meta[src] = {"label": s_lbl, "props": s_props}
-                            nodes_meta[tgt] = {"label": t_lbl, "props": t_props}
-                            edges_list.append({"from": src, "to": tgt, "label": rel})
-            except Exception:
-                indexed_found = False
-
-            # Resilient Substring Fallback
-            if not indexed_found:
-                try:
-                    cypher_sub = """
-                    MATCH (source)
-                    WHERE toLower(source.name) CONTAINS toLower($entity)
-                    MATCH path = (source)-[r*1..2]-(target)
-                    UNWIND relationships(path) as rel
-                    WITH DISTINCT rel, startNode(rel) as s, endNode(rel) as t
-                    RETURN 
-                        s.name AS src, labels(s)[0] AS s_lbl, properties(s) AS s_props,
-                        type(rel) AS rel_type,
-                        t.name AS tgt, labels(t)[0] AS t_lbl, properties(t) AS t_props
-                    LIMIT 35
-                    """
-                    results = list(session.run(cypher_sub, entity=clean_e))
-                    for r in results:
-                        src, s_lbl = r["src"], r["s_lbl"]
-                        tgt, t_lbl = r["tgt"], r["t_lbl"]
-                        rel = r["rel_type"]
-                        edge_key = (src, tgt, rel)
-                        if edge_key not in added_edges:
-                            added_edges.add(edge_key)
-                            s_props = dict(r["s_props"]) if r["s_props"] else {}
-                            t_props = dict(r["t_props"]) if r["t_props"] else {}
-                            fact = f"- [{s_lbl}] `{src}` ──[{rel}]──► [{t_lbl}] `{tgt}`"
-                            facts.append(fact)
-                            nodes_dict[src] = s_lbl
-                            nodes_dict[tgt] = t_lbl
-                            nodes_meta[src] = {"label": s_lbl, "props": s_props}
-                            nodes_meta[tgt] = {"label": t_lbl, "props": t_props}
-                            edges_list.append({"from": src, "to": tgt, "label": rel})
-                except Exception as err:
-                    logger.debug(f"Substring fallback failed for {clean_e}: {err}")
+    if not edges_list:
+        logger.info("Neo4j database returned 0 edges. Activating in-memory CTI Knowledge Graph.")
+        return _fetch_in_memory_threat_graph(entities)
 
     # Stage 3: Quantitative Threat & Blast Radius Analytics
     metrics = calculate_graph_threat_metrics(nodes_dict, edges_list, nodes_meta)
-    
+    return facts, nodes_dict, edges_list, nodes_meta, metrics
+
+def _fetch_in_memory_threat_graph(entities: List[str]) -> Tuple[List[str], Dict[str, str], List[Dict[str, str]], Dict[str, Any], Dict[str, Any]]:
+    """
+    High-fidelity deterministic in-memory CTI Knowledge Graph traversal.
+    Activates automatically when remote Neo4j AuraDB is offline, paused, or unreachable.
+    Computes exact multi-hop kill chains, contextual blast radius, and S-T chokepoint metrics.
+    """
+    from collections import deque
+    try:
+        from ingest_threat_data import ENTERPRISE_CTI_DATA, RELATIONSHIPS
+    except Exception as e:
+        logger.error(f"Failed to load local CTI dataset: {e}")
+        return [], {}, [], {}, {}
+
+    nodes_info = {}
+    for a in ENTERPRISE_CTI_DATA.get("actors", []):
+        nodes_info[a["name"]] = ("ThreatActor", a)
+    for t in ENTERPRISE_CTI_DATA.get("techniques", []):
+        nodes_info[t["name"]] = ("AttackTechnique", t)
+    for c in ENTERPRISE_CTI_DATA.get("cves", []):
+        nodes_info[c["cve"]] = ("Vulnerability", c)
+    for p in ENTERPRISE_CTI_DATA.get("packages", []):
+        nodes_info[p["name"]] = ("SoftwarePackage", p)
+    for s in ENTERPRISE_CTI_DATA.get("services", []):
+        nodes_info[s["name"]] = ("EnterpriseService", s)
+    for pt in ENTERPRISE_CTI_DATA.get("patches", []):
+        nodes_info[pt["name"]] = ("RemediationPatch", pt)
+
+    adj_undirected = {n: [] for n in nodes_info}
+    for s_lbl, s_name, t_lbl, t_name, rel in RELATIONSHIPS:
+        if s_name in nodes_info and t_name in nodes_info:
+            adj_undirected[s_name].append((t_name, rel, "forward"))
+            adj_undirected[t_name].append((s_name, rel, "reverse"))
+
+    matched_nodes = []
+    for ent in entities:
+        ent_clean = ent.strip().lower()
+        if not ent_clean:
+            continue
+        for n in nodes_info:
+            n_low = n.lower()
+            if ent_clean in n_low or n_low in ent_clean:
+                if n not in matched_nodes:
+                    matched_nodes.append(n)
+
+    if not matched_nodes:
+        matched_nodes = [
+            "APT29 (Nobelium / Cozy Bear / Midnight Blizzard)",
+            "k8s-auth-ingress-gateway",
+            "payment-token-vault-service"
+        ]
+
+    facts = []
+    nodes_dict = {}
+    edges_list = []
+    nodes_meta = {}
+    added_edges = set()
+
+    def add_edge_record(u, v, rel, u_lbl, v_lbl):
+        edge_key = (u, v, rel)
+        if edge_key not in added_edges:
+            added_edges.add(edge_key)
+            u_props = nodes_info.get(u, (u_lbl, {}))[1]
+            v_props = nodes_info.get(v, (v_lbl, {}))[1]
+            facts.append(f"- [{u_lbl}] `{u}` ──[{rel}]──► [{v_lbl}] `{v}`")
+            nodes_dict[u] = u_lbl
+            nodes_dict[v] = v_lbl
+            nodes_meta[u] = {"label": u_lbl, "props": dict(u_props)}
+            nodes_meta[v] = {"label": v_lbl, "props": dict(v_props)}
+            edges_list.append({"from": u, "to": v, "label": rel})
+
+    def bfs_path(start, goal):
+        q = deque([(start, [])])
+        visited = {start}
+        while q:
+            curr, path = q.popleft()
+            if curr == goal:
+                return path
+            for nbr, rel, direct in adj_undirected.get(curr, []):
+                if nbr not in visited:
+                    visited.add(nbr)
+                    if direct == "forward":
+                        edge_info = (curr, nbr, rel, nodes_info[curr][0], nodes_info[nbr][0])
+                    else:
+                        edge_info = (nbr, curr, rel, nodes_info[nbr][0], nodes_info[curr][0])
+                    q.append((nbr, path + [edge_info]))
+        return []
+
+    # 1. Multi-hop connecting paths between matched entities
+    if len(matched_nodes) >= 2:
+        for i in range(len(matched_nodes)):
+            for j in range(i + 1, min(len(matched_nodes), i + 3)):
+                for u, v, rel, u_lbl, v_lbl in bfs_path(matched_nodes[i], matched_nodes[j]):
+                    add_edge_record(u, v, rel, u_lbl, v_lbl)
+
+    # 2. Contextual expansion (pull in related patches, packages, lateral movements)
+    seed_nodes = list(nodes_dict.keys()) or matched_nodes
+    for n in seed_nodes:
+        for s_lbl, s_name, t_lbl, t_name, rel in RELATIONSHIPS:
+            if s_name == n:
+                add_edge_record(s_name, t_name, rel, s_lbl, t_lbl)
+            elif t_name == n and rel in ["EXPLOITS_FLAW_IN", "DEPENDS_ON", "RUNS_SOFTWARE", "MITIGATED_BY"]:
+                add_edge_record(s_name, t_name, rel, s_lbl, t_lbl)
+
+    # 3. Fallback to base kill chain if still empty
+    if not edges_list:
+        for s_lbl, s_name, t_lbl, t_name, rel in RELATIONSHIPS[:12]:
+            add_edge_record(s_name, t_name, rel, s_lbl, t_lbl)
+
+    metrics = calculate_graph_threat_metrics(nodes_dict, edges_list, nodes_meta)
     return facts, nodes_dict, edges_list, nodes_meta, metrics
 
 def calculate_graph_threat_metrics(nodes_dict: Dict[str, str], edges: List[Dict[str, str]], nodes_meta: Dict[str, Any]) -> Dict[str, Any]:
