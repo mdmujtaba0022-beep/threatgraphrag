@@ -96,6 +96,8 @@ class CountermeasureResponse(BaseModel):
     sigma_rule: str
     kubernetes_policy: str
     quarantine_script: str
+    suricata_rule: Optional[str] = ""
+    splunk_query: Optional[str] = ""
 
 class ChatMessage(BaseModel):
     role: str = Field(..., example="user")
@@ -296,7 +298,9 @@ def simulate_defense_countermeasure(request: CountermeasureRequest):
         protected_crown_jewels=sim_res["protected_crown_jewels"],
         sigma_rule=sim_res["defense_artifacts"]["sigma_rule"],
         kubernetes_policy=sim_res["defense_artifacts"]["kubernetes_policy"],
-        quarantine_script=sim_res["defense_artifacts"]["quarantine_script"]
+        quarantine_script=sim_res["defense_artifacts"]["quarantine_script"],
+        suricata_rule=sim_res["defense_artifacts"].get("suricata_rule", ""),
+        splunk_query=sim_res["defense_artifacts"].get("splunk_query", "")
     )
 
 @app.post("/api/threat-query", response_model=QueryResponse, tags=["Threat Intelligence"])

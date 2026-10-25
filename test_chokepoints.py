@@ -69,7 +69,10 @@ class TestChokepointsAndCountermeasures(unittest.TestCase):
         self.assertIn("sigma_rule", sim["defense_artifacts"])
         self.assertIn("kubernetes_policy", sim["defense_artifacts"])
         self.assertIn("quarantine_script", sim["defense_artifacts"])
+        self.assertIn("suricata_rule", sim["defense_artifacts"])
+        self.assertIn("splunk_query", sim["defense_artifacts"])
         self.assertIn("CVE-2024-21762", sim["defense_artifacts"]["sigma_rule"])
+        self.assertIn("2890001", sim["defense_artifacts"]["suricata_rule"])
 
     def test_countermeasure_simulation_isolate(self):
         """Verify pod isolation severs ingress pivot and generates NetworkPolicy."""

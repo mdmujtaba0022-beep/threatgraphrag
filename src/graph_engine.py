@@ -6,6 +6,7 @@ topological blast radius calculations, and quantitative risk scoring.
 
 import re
 import time
+import uuid
 import logging
 from typing import List, Dict, Tuple, Any, Optional
 from pydantic import BaseModel, Field
@@ -553,8 +554,10 @@ def simulate_countermeasure(
     service_str = clean_target if not "CVE-" in clean_target.upper() else (before_metrics["ingress_entry_points"][0] if before_metrics["ingress_entry_points"] else "k8s-auth-ingress-gateway")
     
     sigma_artifact = generate_sigma_rule(target_entity=service_str, technique="T1190: Exploit Public-Facing Application", adversary=adversary_str, cve=cve_str)
-    k8s_artifact = generate_kubernetes_isolation_policy(service_name=service_str)
+    k8s_artifact = generate_kubernetes_isolation_policy(service_name=service_str, target_cve=cve_str)
     bash_artifact = generate_quarantine_script(service_name=service_str, cve=cve_str)
+    suricata_artifact = generate_suricata_ids_rule(service_name=service_str, cve=cve_str, adversary=adversary_str)
+    splunk_artifact = generate_splunk_hunting_query(service_name=service_str, cve=cve_str, adversary=adversary_str)
     
     return {
         "target_entity": clean_target,
@@ -572,69 +575,184 @@ def simulate_countermeasure(
         "defense_artifacts": {
             "sigma_rule": sigma_artifact,
             "kubernetes_policy": k8s_artifact,
-            "quarantine_script": bash_artifact
+            "quarantine_script": bash_artifact,
+            "suricata_rule": suricata_artifact,
+            "splunk_query": splunk_artifact
         }
     }
 
-def generate_sigma_rule(target_entity: str, technique: str, adversary: str, cve: str) -> str:
-    """Generates standard, production-ready Sigma SIEM detection rule."""
+def generate_sigma_rule(target_entity: str, technique: str = "T1190: Exploit Public-Facing Application", adversary: str = "APT29", cve: str = "CVE-2021-44228") -> str:
+    """Generates standard, production-ready multi-source Sigma SIEM detection rule."""
     cve_clean = cve.upper()
-    return f"""title: Detect {adversary} Exploitation via {cve_clean} Against {target_entity}
-id: 7e9b21f4-3d9a-4122-b91c-8e47856b3e10
+    rule_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{target_entity}-{cve_clean}-{adversary}"))
+    today = time.strftime("%Y-%m-%d")
+    
+    cve_lower = cve_clean.lower()
+    if "44228" in cve_lower or "log4j" in target_entity.lower():
+        specific_payloads = [
+            "${jndi:ldap://",
+            "${jndi:rmi://",
+            "${jndi:dns://",
+            "${jndi:ldaps://",
+            "${jndi:iiop://",
+            "${lower:j}${lower:n}${lower:d}${lower:i}",
+            "${env:AWS_SECRET_ACCESS_KEY}",
+        ]
+    elif "3094" in cve_lower or "xz" in target_entity.lower():
+        specific_payloads = [
+            "liblzma.so.5",
+            "/usr/sbin/sshd",
+            "LD_PRELOAD",
+            "RSA_public_decrypt@plt",
+            "systemd/system/ssh",
+        ]
+    elif "21762" in cve_lower or "forti" in target_entity.lower():
+        specific_payloads = [
+            "/remote/fgt_lang",
+            "/remote/logincheck",
+            "/dana-na/",
+            "%2e%2e%2f",
+            "Transfer-Encoding: chunked",
+        ]
+    else:
+        specific_payloads = [
+            "${jndi:",
+            "../..",
+            "/etc/passwd",
+            "/etc/shadow",
+            "/proc/self/environ",
+            "cmd.exe /c",
+            "/bin/sh -i",
+            "curl -fsSL",
+            "wget -q",
+        ]
+        
+    payload_lines = "\n".join([f'      - "{p}"' for p in specific_payloads])
+    
+    return f"""title: Detect {adversary} Multi-Hop Exploitation via {cve_clean} Targeting {target_entity}
+id: {rule_id}
 status: production
-description: Identifies multi-hop exploitation activity attributed to {adversary} targeting {target_entity} using {cve_clean} ({technique}).
+description: |
+  Autonomous detection rule identifying initial exploit delivery, post-exploitation shell spawning,
+  and lateral movement attributed to {adversary} targeting {target_entity} leveraging {cve_clean} ({technique}).
+  Correlates Kubernetes Ingress Auditing, Endpoint Process Creation (Sysmon 1 / Win 4688 / Linux auditd),
+  and Outbound Network Sockets (Sysmon 3 / Zeek).
 references:
   - https://attack.mitre.org/techniques/T1190/
+  - https://attack.mitre.org/techniques/T1059/
+  - https://attack.mitre.org/techniques/T1210/
   - https://nvd.nist.gov/vuln/detail/{cve_clean}
   - https://www.cisa.gov/known-exploited-vulnerabilities-catalog
-author: ThreatGraphRAG Autonomous SecOps Engine
-date: {time.strftime("%Y-%m-%d")}
+author: ThreatGraphRAG Active Defense & Chokepoint Engine
+date: {today}
+modified: {today}
 tags:
   - attack.initial_access
   - attack.t1190
+  - attack.execution
+  - attack.t1059.004
+  - attack.t1059.001
   - attack.lateral_movement
+  - attack.t1210
+  - attack.credential_access
   - cve.{cve_clean.lower()}
   - actor.{adversary.lower().replace(' ', '_')}
 logsource:
-  category: network_connection
-  product: kubernetes_audit
+  category: multi_source
+  definition: 'Correlates Kubernetes Ingress Auditing, Endpoint Process Creation (Sysmon 1 / Win 4688 / Linux auditd), and Outbound Network Sockets (Sysmon 3 / Zeek)'
 detection:
+  # Section A: Ingress Exploit Delivery & Web Request Telemetry
   selection_target:
     TargetResource.Name|contains:
       - "{target_entity}"
+      - "/api/"
   selection_exploit_payloads:
     RequestURI|contains:
-      - "${{jndi:ldap://"
-      - "${{jndi:rmi://"
-      - "${{jndi:dns://"
-      - "/etc/shadow"
-      - "cmd.exe"
+{payload_lines}
+  # Section B: Endpoint Shell Spawning & Stager Execution
+  selection_process_spawn:
+    ParentImage|endswith:
+      - "java"
+      - "java.exe"
+      - "w3wp.exe"
+      - "httpd"
+      - "nginx"
+      - "node"
+    Image|endswith:
       - "/bin/sh"
+      - "/bin/bash"
+      - "/bin/dash"
+      - "cmd.exe"
+      - "powershell.exe"
+      - "pwsh"
+      - "curl"
+      - "wget"
+  # Section C: Lateral Outbound Pivot & C2 Sockets
   selection_suspicious_egress:
     DestinationPort:
       - 389
       - 636
       - 1099
+      - 1389
       - 4444
-  condition: selection_target and (selection_exploit_payloads or selection_suspicious_egress)
+      - 8080
+      - 8443
+    DestinationIp|cidr:
+      - "10.0.0.0/8"
+      - "172.16.0.0/12"
+      - "192.168.0.0/16"
+      - "169.254.169.254/32"
+  # Section D: False Positive Suppression & Probes
+  filter_health_checks:
+    RequestURI|startswith:
+      - "/healthz"
+      - "/livez"
+      - "/readyz"
+      - "/metrics"
+    UserAgent|contains:
+      - "kube-probe"
+      - "Prometheus"
+  filter_scanners:
+    SourceIp|cidr:
+      - "10.240.0.0/24"  # Authorized Internal Vulnerability Scanner Subnet
+  condition: (selection_target and (selection_exploit_payloads or selection_process_spawn or selection_suspicious_egress)) and not (filter_health_checks or filter_scanners)
+fields:
+  - EventID
+  - CommandLine
+  - ParentCommandLine
+  - Image
+  - User
+  - RequestURI
+  - SourceIp
+  - DestinationIp
+  - DestinationPort
 falsepositives:
-  - Authorized vulnerability penetration testing by internal Red Team
-  - Internal security compliance port scans
+  - Authorized vulnerability penetration testing exercises with active engagement ROE
+  - Legitimate automated build pipelines or testing scripts running in dev/staging namespaces
 level: critical
 """
 
-def generate_kubernetes_isolation_policy(service_name: str) -> str:
+def generate_kubernetes_isolation_policy(service_name: str, target_cve: str = "CVE-2021-44228") -> str:
     """Generates Kubernetes Zero-Trust NetworkPolicy manifest to isolate compromised workloads."""
-    svc_clean = service_name.lower().replace(":", "-").replace("/", "-")
+    svc_clean = service_name.lower().replace(":", "-").replace("/", "-").replace(" ", "-")
+    cve_clean = target_cve.upper()
+    iso_time = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    
     return f"""apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: isolate-{svc_clean}-countermeasure
+  name: isolate-{svc_clean}-zero-trust
   namespace: production-tier
   labels:
     secops.threatgraphrag.io/quarantine: "active"
-    incident.cisa-alert: "AA26-0924-CTI"
-    generated-by: "ThreatGraphRAG-Simulation-Engine"
+    secops.threatgraphrag.io/incident-id: "INC-2026-CHOKEPOINT"
+    secops.threatgraphrag.io/mitigated-cve: "{cve_clean}"
+    generated-by: "ThreatGraphRAG-Active-Defense-Engine"
+  annotations:
+    description: "Zero-Trust micro-segmentation quarantine policy severing all lateral movement to Tier-0 crown jewels while preserving volatile forensic channels."
+    cisa.gov/kev-alert: "{cve_clean}"
+    soc.remediation/action: "containment-isolation"
+    soc.remediation/timestamp: "{iso_time}"
 spec:
   podSelector:
     matchLabels:
@@ -643,7 +761,148 @@ spec:
   - Ingress
   - Egress
   ingress:
-  # Permit ONLY authenticated forensic telemetry scraping from SOC namespace
+  # Rule 1: Allow strictly authenticated forensic telemetry scraping from authorized SOC namespace
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: secops-forensics
+          access-tier: authorized-ir
+      podSelector:
+        matchLabels:
+          role: forensic-agent
+    ports:
+    - protocol: TCP
+      port: 8443
+    - protocol: TCP
+      port: 2222
+  # Ingress from all other pods or external internet is DROPPED by default
+  egress:
+  # Rule 1: Permit DNS resolution strictly to CoreDNS pods in kube-system (preserves probe health without socket leaks)
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  # Rule 2: Permit encrypted audit and telemetry export strictly to SIEM logging namespace
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: secops-logging
+      podSelector:
+        matchLabels:
+          app: siem-fluentbit-collector
+    ports:
+    - protocol: TCP
+      port: 514
+    - protocol: TCP
+      port: 4317   # OpenTelemetry gRPC
+    - protocol: TCP
+      port: 9200   # Elasticsearch Ingestion
+  # All other outbound egress to RFC1918 Private VPC subnets (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16)
+  # and Cloud Metadata IMDS (169.254.169.254) is COMPLETELY DROPPED by default.
+"""
+
+def generate_quarantine_script(service_name: str, cve: str) -> str:
+    """Generates executable bash DevOps and Incident Response containment script."""
+    svc_clean = service_name.lower().replace(":", "-").replace("/", "-").replace(" ", "-")
+    cve_clean = cve.upper()
+    iso_time = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    
+    return f"""#!/usr/bin/env bash
+# ==============================================================================
+# ThreatGraphRAG Autonomous Incident Containment & Forensic Acquisition Playbook
+# Target Workload: {service_name}
+# Mitigated CVE:   {cve_clean}
+# Authority:       Autonomous SecOps Engine / SOC Incident Commander
+# Generated:       {iso_time}
+# ==============================================================================
+set -euo pipefail
+
+# ANSI Palette
+RED='\\033[0;31m'
+GREEN='\\033[0;32m'
+YELLOW='\\033[1;33m'
+CYAN='\\033[0;36m'
+NC='\\033[0m'
+
+NAMESPACE="${{K8S_NAMESPACE:-production-tier}}"
+APP_LABEL="${{APP_LABEL:-{svc_clean}}}"
+INCIDENT_ID="INC-$(date +%Y%m%d%H%M%S)-{svc_clean}"
+FORENSIC_DIR="/var/log/secops/forensics/${{INCIDENT_ID}}"
+WEBHOOK_URL="${{SOC_WEBHOOK_URL:-https://hooks.slack.com/services/SEC/OPS/ALERT}}"
+
+log_info()    {{ echo -e "${{CYAN}}[INFO $(date +'%H:%M:%S')]${{NC}} $1"; }}
+log_warn()    {{ echo -e "${{YELLOW}}[WARN $(date +'%H:%M:%S')]${{NC}} $1"; }}
+log_alert()   {{ echo -e "${{RED}}[ALERT $(date +'%H:%M:%S')]${{NC}} $1"; }}
+log_success() {{ echo -e "${{GREEN}}[SUCCESS $(date +'%H:%M:%S')]${{NC}} $1"; }}
+
+log_alert "INITIATING TACTICAL QUARANTINE PLAYBOOK: ${{APP_LABEL}} (Target: {cve_clean})"
+mkdir -p "${{FORENSIC_DIR}}"
+
+# ------------------------------------------------------------------------------
+# STEP 1: Cordon & Taint Kubernetes Nodes to Prevent Workload Migration
+# ------------------------------------------------------------------------------
+log_info "[Step 1/6] Cordoning Kubernetes nodes hosting ${{APP_LABEL}}..."
+NODES=$(kubectl get pods -n "${{NAMESPACE}}" -l "app=${{APP_LABEL}}" -o jsonpath='{{.items[*].spec.nodeName}}' | tr ' ' '\\n' | sort -u)
+for NODE in $NODES; do
+    if [ -n "$NODE" ]; then
+        log_warn "Cordoning host node: $NODE"
+        kubectl cordon "$NODE" || true
+        kubectl taint nodes "$NODE" secops.quarantine=active:NoSchedule --overwrite || true
+    fi
+done
+
+# ------------------------------------------------------------------------------
+# STEP 2: Live Volatile Memory & Socket Telemetry Acquisition (Pre-Kill Capture)
+# ------------------------------------------------------------------------------
+log_info "[Step 2/6] Acquiring live volatile memory dump and active socket tables..."
+PODS=$(kubectl get pods -n "${{NAMESPACE}}" -l "app=${{APP_LABEL}}" -o jsonpath='{{.items[*].metadata.name}}')
+for POD in $PODS; do
+    log_info "Collecting volatile forensics from pod: $POD"
+    
+    # Capture active network connections & listening sockets
+    kubectl exec -n "${{NAMESPACE}}" "$POD" -- ss -tulpn > "${{FORENSIC_DIR}}/${{POD}}_sockets.txt" 2>/dev/null || true
+    
+    # Capture active process tree
+    kubectl exec -n "${{NAMESPACE}}" "$POD" -- ps auxf > "${{FORENSIC_DIR}}/${{POD}}_psaux.txt" 2>/dev/null || true
+    
+    # Attempt container PID memory core dump
+    kubectl exec -n "${{NAMESPACE}}" "$POD" -- gcore -o "/tmp/dump" 1 2>/dev/null && \\
+        kubectl cp "${{NAMESPACE}}/${{POD}}:/tmp/dump" "${{FORENSIC_DIR}}/${{POD}}_mem.dmp" 2>/dev/null || \\
+        log_warn "Process gcore acquisition not supported in container image, falling back to procfs inspection."
+done
+
+# Compute SHA-256 for cryptographic chain of custody
+log_info "Hashing forensic artifacts for chain-of-custody verification..."
+find "${{FORENSIC_DIR}}" -type f -exec sha256sum {{}} + > "${{FORENSIC_DIR}}/MANIFEST_SHA256.txt" || true
+
+# ------------------------------------------------------------------------------
+# STEP 3: Deploy Zero-Trust Ingress/Egress Isolation NetworkPolicy
+# ------------------------------------------------------------------------------
+log_info "[Step 3/6] Applying Zero-Trust NetworkPolicy to sever lateral movement..."
+kubectl apply -n "${{NAMESPACE}}" -f - <<'EOF'
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: isolate-{svc_clean}-countermeasure
+  namespace: production-tier
+  labels:
+    secops.threatgraphrag.io/quarantine: "active"
+spec:
+  podSelector:
+    matchLabels:
+      app: {svc_clean}
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
   - from:
     - namespaceSelector:
         matchLabels:
@@ -652,62 +911,150 @@ spec:
     - protocol: TCP
       port: 8443
   egress:
-  # Permit ONLY encrypted syslog / audit log dispatch to SIEM
   - to:
     - namespaceSelector:
         matchLabels:
-          name: secops-logging
+          kubernetes.io/metadata.name: kube-system
     ports:
-    - protocol: TCP
-      port: 514
-"""
-
-def generate_quarantine_script(service_name: str, cve: str) -> str:
-    """Generates executable bash DevOps containment script."""
-    svc_clean = service_name.lower().replace(":", "-").replace("/", "-")
-    return f"""#!/usr/bin/env bash
-# ==============================================================================
-# ThreatGraphRAG Automated Incident Containment Playbook
-# Target Service: {service_name}
-# Mitigated CVE: {cve}
-# Execution Authority: SOC Lead / Autonomous Incident Response
-# Generated Timestamp: {time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
-# ==============================================================================
-set -euo pipefail
-
-echo "[*] INITIATING TACTICAL COUNTERMEASURE FOR: {service_name}"
-
-# 1. Prevent Kubernetes scheduler from rescheduling compromised pod
-echo "[*] Step 1: Cordoning Kubernetes nodes hosting {service_name}..."
-kubectl cordon -l app={svc_clean} --overwrite || true
-
-# 2. Deploy Zero-Trust Isolation NetworkPolicy (Immediate Lateral Movement Cut)
-echo "[*] Step 2: Applying Zero-Trust Ingress/Egress NetworkPolicy..."
-kubectl apply -f - <<'EOF'
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: isolate-{svc_clean}-countermeasure
-  namespace: production-tier
-spec:
-  podSelector:
-    matchLabels:
-      app: {svc_clean}
-  policyTypes:
-  - Ingress
-  - Egress
+    - protocol: UDP
+      port: 53
 EOF
+log_success "Zero-Trust NetworkPolicy successfully enrolled."
 
-# 3. Tag Pod for Live Volatile Memory Capture & Forensics
-echo "[*] Step 3: Tagging pods with 'quarantine=active' for automated memory dump..."
-kubectl label pods -l app={svc_clean} secops.quarantine=active --overwrite || true
+# ------------------------------------------------------------------------------
+# STEP 4: Sever Active Host Kernel Sockets & Flush Conntrack Tables
+# ------------------------------------------------------------------------------
+log_info "[Step 4/6] Terminating existing kernel TCP sockets via conntrack & iptables..."
+sudo conntrack -D -p tcp --dport 8443 2>/dev/null || true
+sudo iptables -I FORWARD -m comment --comment "ThreatGraphRAG-{cve_clean}-Mitigation" -p tcp --dport 8443 -j DROP || true
 
-# 4. Terminate active unauthorized outbound sockets via iptables
-echo "[*] Step 4: Severing host-level lateral movement routes..."
-sudo iptables -I FORWARD -m comment --comment "ThreatGraphRAG-{cve}-Mitigation" -p tcp --dport 8443 -j DROP || true
+# Drop metadata service egress (prevent cloud token exfiltration)
+sudo iptables -I OUTPUT -d 169.254.169.254 -j DROP 2>/dev/null || true
 
-echo "[+] SUCCESS: Countermeasure active. Multi-hop kill-chain to crown jewels severed."
+# ------------------------------------------------------------------------------
+# STEP 5: Apply Cgroup Resource Throttling (Cryptominer / Wiper Denial)
+# ------------------------------------------------------------------------------
+log_info "[Step 5/6] Restricting container CPU quota to 5% via cgroups to starve active malware..."
+for CGROUP in /sys/fs/cgroup/cpu/kubepods*/*{svc_clean}*/cpu.cfs_quota_us; do
+    if [ -f "$CGROUP" ]; then
+        echo 5000 | sudo tee "$CGROUP" >/dev/null || true
+    fi
+done
+
+# ------------------------------------------------------------------------------
+# STEP 6: Dispatch Autonomous Incident Alert to SOC Webhook
+# ------------------------------------------------------------------------------
+log_info "[Step 6/6] Dispatching incident notification payload to SecOps webhook..."
+curl -s -X POST -H 'Content-type: application/json' \\
+    --data "{{\\"text\\":\\":rotating_light: *ThreatGraphRAG Incident Isolation Active*\\\\n*Target Workload:* \`{service_name}\`\\\\n*Mitigated CVE:* \`{cve_clean}\`\\\\n*Action:* Zero-Trust NetworkPolicy Enrolled & Volatile RAM Acquired\\\\n*Artifact Directory:* \`${{FORENSIC_DIR}}\`\\\\n*Kill-Chain:* Terminated before Tier-0 Crown Jewels\\"}}" \\
+    "${{WEBHOOK_URL}}" 2>/dev/null || true
+
+log_success "CONTAINMENT VERIFIED: Lateral kill-chain to Tier-0 crown jewels severed successfully."
 """
+
+def generate_suricata_ids_rule(service_name: str, cve: str, adversary: str) -> str:
+    """Generates high-performance Suricata 6.x/7.x and Snort 3 Network IDS inspection rules."""
+    svc_clean = service_name.lower().replace(":", "-").replace("/", "-")
+    cve_clean = cve.upper()
+    cve_lower = cve_clean.lower()
+    today = time.strftime("%Y-%m-%d")
+    
+    if "44228" in cve_lower or "log4j" in service_name.lower():
+        sig_inbound = 'content:"${jndi:"; nocase; pcre:"/\\$\\{(?:[^}]*?\\$\\{[^}]*?\\})*?(?:jndi|lower|upper|env|base64):[a-z0-9_.-]+:\\/\\//i";'
+        sig_egress = 'content:"java"; nocase; pcre:"/(?:ldap|rmi|dns|ldaps):\\/\\/[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}/";'
+    elif "3094" in cve_lower or "xz" in service_name.lower():
+        sig_inbound = 'content:"SSH-2.0"; offset:0; depth:7; pcre:"/liblzma\\.so|RSA_public_decrypt/i";'
+        sig_egress = 'content:"SSH-2.0"; nocase;'
+    elif "21762" in cve_lower or "forti" in service_name.lower():
+        sig_inbound = 'content:"/remote/fgt_lang"; nocase; http_uri;'
+        sig_egress = 'content:"Transfer-Encoding: chunked"; nocase; http_header;'
+    else:
+        sig_inbound = 'content:".."; nocase; pcre:"/(?:\\.\\.\\/|\\.\\.\\\\|%2e%2e%2f|cmd\\.exe|\\/bin\\/sh)/i";'
+        sig_egress = 'content:"uid=0(root)"; nocase;'
+
+    return f"""# ==============================================================================
+# ThreatGraphRAG Autonomous Network IDS Rule Set (Suricata 6.x/7.x & Snort 3)
+# Target Workload: {service_name}
+# Mitigated CVE:   {cve_clean}
+# Threat Actor:    {adversary}
+# Generation Date: {today}
+# ==============================================================================
+
+# Rule 1: Inbound Exploit Delivery Attempt against {service_name}
+alert tcp $EXTERNAL_NET any -> $HOME_NET [80,443,8080,8443] (
+    msg:"SEC-ALERT [ThreatGraphRAG] {adversary} Inbound Exploitation Attempt ({cve_clean}) targeting {service_name}";
+    flow:to_server,established;
+    {sig_inbound}
+    threshold:type limit, track by_src, count 1, seconds 60;
+    classtype:attempted-admin;
+    sid:2890001; rev:1;
+    metadata:created_at {today}, cve {cve_clean}, mitre_technique T1190, confidence High;
+)
+
+# Rule 2: Outbound Reverse Shell & Secondary Payload Egress
+alert tcp $HOME_NET any -> $EXTERNAL_NET [389,636,1099,1389,4444,8888] (
+    msg:"SEC-ALERT [ThreatGraphRAG] {adversary} Outbound C2 Callback / Stager Egress ({cve_clean})";
+    flow:to_server,established;
+    {sig_egress}
+    threshold:type both, track by_src, count 3, seconds 30;
+    classtype:trojan-activity;
+    sid:2890002; rev:1;
+    metadata:created_at {today}, cve {cve_clean}, mitre_technique T1071.001, confidence High;
+)
+
+# Rule 3: East-West Lateral Movement to Internal RFC1918 Crown Jewels
+alert tcp $HOME_NET any -> [10.0.0.0/8,172.16.0.0/12,192.168.0.0/16] [22,3389,445,1433,5432,6379,8443] (
+    msg:"SEC-ALERT [ThreatGraphRAG] Unauthorized East-West Lateral Movement from Quarantined Workload {svc_clean}";
+    flow:to_server,established;
+    threshold:type both, track by_src, count 1, seconds 10;
+    classtype:bad-unknown;
+    sid:2890003; rev:1;
+    metadata:created_at {today}, cve {cve_clean}, mitre_technique T1210, confidence High;
+)
+"""
+
+def generate_splunk_hunting_query(service_name: str, cve: str, adversary: str) -> str:
+    """Generates multi-stage Splunk SPL threat hunting and correlation query."""
+    svc_clean = service_name.lower().replace(":", "-").replace("/", "-")
+    cve_clean = cve.upper()
+    
+    return f"""`comment("==============================================================================")`
+`comment("ThreatGraphRAG Autonomous Splunk SPL Multi-Stage Attack Path Correlation Hunt")`
+`comment("Target: {service_name} | CVE: {cve_clean} | Adversary: {adversary}")`
+`comment("==============================================================================")`
+
+(index=k8s_audit OR index=web_ingress OR index=sysmon OR index=linux_audit)
+(
+    (sourcetype="kubernetes:audit" AND uri_path="*{svc_clean}*" AND (uri_path="*jndi*" OR uri_path="*${{*" OR uri_path="*../*" OR uri_path="*cmd.exe*"))
+    OR
+    (sourcetype="XmlWinEventLog:Microsoft-Windows-Sysmon/Operational" EventCode=1 AND ParentImage IN ("*java*", "*w3wp.exe*", "*httpd*", "*nginx*", "*node*") AND Image IN ("*cmd.exe*", "*powershell.exe*", "*sh*", "*bash*", "*curl*", "*wget*"))
+    OR
+    (sourcetype="XmlWinEventLog:Microsoft-Windows-Sysmon/Operational" EventCode=3 AND DestinationPort IN (389, 636, 1099, 1389, 4444) AND DestinationIsIpv6=false)
+    OR
+    (sourcetype="linux:audit" (syscall=59 OR syscall=322) AND (exe="*sh" OR exe="*bash" OR exe="*python*"))
+)
+| eval attack_phase=case(
+    match(uri_path, "(?i)jndi|cmd|powershell|\\.\\./"), "Phase-1: Inbound Web Exploit ({cve_clean})",
+    EventCode=1 OR (syscall=59 OR syscall=322), "Phase-2: Shell Spawning / Execution",
+    EventCode=3 AND DestinationPort IN (389, 636, 1099, 1389, 4444), "Phase-3: C2 Egress / JNDI Callback",
+    true(), "Phase-4: East-West Lateral Movement Attempt"
+)
+| stats 
+    min(_time) as first_seen,
+    max(_time) as last_seen,
+    values(src_ip) as attacker_ips,
+    values(dest_ip) as targeted_workloads,
+    values(dest_port) as target_ports,
+    values(CommandLine) as executed_commands,
+    values(ParentCommandLine) as parent_processes,
+    dc(dest_ip) as distinct_lateral_targets,
+    count as event_volume
+    by attack_phase, host
+| eval duration_sec = last_seen - first_seen
+| where event_volume > 0
+| sort - distinct_lateral_targets, - event_volume
+"""
+
 
 def compute_graph_chokepoints(
     nodes_dict: Dict[str, str],

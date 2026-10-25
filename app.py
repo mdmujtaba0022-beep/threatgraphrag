@@ -170,40 +170,40 @@ def get_node_level(label: str, name: str, props: dict) -> int:
 def render_attack_graph(nodes_dict, edges, nodes_meta=None, graph_height=720, chokepoint_node=None):
     theme = {
         "GitHubRepo": {
-            "bg": "#1E1035", "border": "#A855F7", "highlight": "#9333EA",
-            "badge": "Repository"
+            "bg": "#1E1035", "border": "#A855F7", "highlight": "#C084FC",
+            "badge": "Repository", "icon": "🐙"
         },
         "ThreatActor": {
-            "bg": "#2B0B0B", "border": "#EF4444", "highlight": "#DC2626",
-            "badge": "Threat Actor"
+            "bg": "#2B0B0B", "border": "#EF4444", "highlight": "#F87171",
+            "badge": "Threat Actor", "icon": "⚡"
         },
         "AttackTechnique": {
-            "bg": "#271204", "border": "#F97316", "highlight": "#EA580C",
-            "badge": "Technique"
+            "bg": "#271204", "border": "#F97316", "highlight": "#FB923C",
+            "badge": "Technique", "icon": "🎯"
         },
         "Vulnerability": {
-            "bg": "#330814", "border": "#F43F5E", "highlight": "#E11D48",
-            "badge": "Vulnerability"
+            "bg": "#330814", "border": "#F43F5E", "highlight": "#FB7185",
+            "badge": "Vulnerability", "icon": "⚠️"
         },
         "SoftwarePackage": {
-            "bg": "#261702", "border": "#EAB308", "highlight": "#CA8A04",
-            "badge": "Dependency"
+            "bg": "#261702", "border": "#EAB308", "highlight": "#FACC15",
+            "badge": "Dependency", "icon": "📦"
         },
         "EnterpriseService": {
-            "bg": "#062035", "border": "#06B6D4", "highlight": "#0284C7",
-            "badge": "Ingress"
+            "bg": "#062035", "border": "#06B6D4", "highlight": "#38BDF8",
+            "badge": "Ingress", "icon": "🌐"
         },
         "EnterpriseService_Core": {
-            "bg": "#131336", "border": "#818CF8", "highlight": "#6366F1",
-            "badge": "Tier-0 Asset"
+            "bg": "#1A103D", "border": "#818CF8", "highlight": "#A5B4FC",
+            "badge": "Tier-0 Asset", "icon": "💎"
         },
         "RemediationPatch": {
-            "bg": "#032018", "border": "#10B981", "highlight": "#059669",
-            "badge": "Remediation"
+            "bg": "#032018", "border": "#10B981", "highlight": "#34D399",
+            "badge": "Remediation", "icon": "🛡️"
         },
         "SecurityControl": {
-            "bg": "#151B26", "border": "#9CA3AF", "highlight": "#4B5563",
-            "badge": "Control"
+            "bg": "#151B26", "border": "#94A3B8", "highlight": "#CBD5E1",
+            "badge": "Control", "icon": "🔒"
         }
     }
 
@@ -233,9 +233,9 @@ def render_attack_graph(nodes_dict, edges, nodes_meta=None, graph_height=720, ch
         base_label = label.split("(")[0].strip() if "(" in label else label
         status_suffix = ""
         if "(MITIGATED)" in label:
-            status_suffix = "\n[MITIGATED]"
+            status_suffix = "\n✅ [MITIGATED]"
         elif "(QUARANTINED)" in label:
-            status_suffix = "\n[QUARANTINED]"
+            status_suffix = "\n🔒 [QUARANTINED]"
 
         level = get_node_level(base_label, name, props)
         
@@ -245,37 +245,39 @@ def render_attack_graph(nodes_dict, edges, nodes_meta=None, graph_height=720, ch
             
         style = theme.get(lookup_label, {
             "bg": "#0F172A", "border": "#64748B", "highlight": "#475569",
-            "badge": base_label
+            "badge": base_label, "icon": "🛡️"
         })
+        
+        icon = style.get("icon", "🛡️")
         
         if base_label == "ThreatActor":
             primary = name.split("(")[0].strip()
             tier = props.get("tier", "State-Sponsored APT")
-            display_label = f"[{style['badge'].upper()}]\n{primary}\n{tier}"
+            display_label = f"{icon}  {primary}\n{tier}"
         elif base_label == "Vulnerability":
             cve_id = name.split("(")[0].strip()
             cve_alias = name.split("(")[1].replace(")", "").strip() if "(" in name else ""
             cvss = props.get("cvss", "10.0")
             epss = props.get("epss", "").split(" ")[0]
             metric_str = f"CVSS {cvss}" + (f" | {epss}" if epss else "")
-            display_label = f"[{style['badge'].upper()}]\n{cve_id}"
             if cve_alias:
-                display_label += f"\n({cve_alias})"
-            display_label += f"\n{metric_str}"
+                display_label = f"{icon}  {cve_id} ({cve_alias})\n{metric_str}"
+            else:
+                display_label = f"{icon}  {cve_id}\n{metric_str}"
         elif base_label == "EnterpriseService":
             cloud = props.get("cloud", "")
             cloud_short = cloud.split(" ")[0] if cloud else ""
-            display_label = f"[{style['badge'].upper()}]\n{name}"
+            svc_role = "Tier-0 Crown Jewel" if lookup_label == "EnterpriseService_Core" else ("Ingress Gateway" if any(k in name.lower() for k in ["ingress", "gateway", "auth"]) else "Enterprise Workload")
             if cloud_short:
-                display_label += f"\n[{cloud_short}]"
+                svc_role += f" [{cloud_short}]"
+            display_label = f"{icon}  {name}\n{svc_role}"
         elif base_label == "AttackTechnique":
             t_id = props.get("id", "")
             tactic = props.get("tactic", "")
-            clean_name = name[:22] + "..." if len(name) > 22 else name
-            badge_txt = f"{style['badge'].upper()}: {t_id}" if t_id else style['badge'].upper()
-            display_label = f"[{badge_txt}]\n{clean_name}"
-            if tactic:
-                display_label += f"\n<{tactic}>"
+            clean_name = name[:20] + "..." if len(name) > 20 else name
+            header = f"{t_id}: {clean_name}" if t_id else clean_name
+            sub = f"<{tactic}>" if tactic else "MITRE ATT&CK"
+            display_label = f"{icon}  {header}\n{sub}"
         elif base_label == "SoftwarePackage":
             parts = name.split(":")
             if len(parts) >= 3:
@@ -284,28 +286,27 @@ def render_attack_graph(nodes_dict, edges, nodes_meta=None, graph_height=720, ch
                 pkg_show = f"{parts[0]} v{parts[1]}"
             else:
                 pkg_show = name
-            display_label = f"[{style['badge'].upper()}]\n{pkg_show}"
+            display_label = f"{icon}  {pkg_show}\nSoftware Dependency"
         elif base_label == "RemediationPatch":
             clean_p = name.split("(")[0].strip()[:24]
             bulletin = props.get("bulletin", "").split("/")[0].strip()
-            display_label = f"[{style['badge'].upper()}]\n{clean_p}"
-            if bulletin:
-                display_label += f"\n{bulletin[:22]}"
+            sub = bulletin[:20] if bulletin else "Security Advisory Patch"
+            display_label = f"{icon}  {clean_p}\n{sub}"
         elif base_label == "GitHubRepo":
             clean_r = name.replace("Repo: ", "").strip()
-            display_label = f"[{style['badge'].upper()}]\n{clean_r}"
+            display_label = f"{icon}  {clean_r}\nTarget Repository"
         else:
-            clean_n = name[:26] + "..." if len(name) > 26 else name
-            display_label = f"[{style['badge'].upper()}]\n{clean_n}"
+            clean_n = name[:24] + "..." if len(name) > 24 else name
+            display_label = f"{icon}  {clean_n}\n{style['badge']}"
             
         if status_suffix:
             display_label += status_suffix
 
         is_chokepoint = bool(chokepoint_node and (chokepoint_node.lower() == name.lower() or chokepoint_node.lower() in name.lower()))
         if is_chokepoint:
-            display_label = f"[CHOKEPOINT • ARTICULATION]\n" + display_label
+            display_label = f"🔥 CHOKEPOINT • ARTICULATION POINT 🔥\n" + display_label
 
-        node_bg = "#78350F" if is_chokepoint else style["bg"]
+        node_bg = "#451A03" if is_chokepoint else style["bg"]
         node_border = "#F59E0B" if is_chokepoint else style["border"]
         if "(MITIGATED)" in label:
             node_bg = "#064E3B"
@@ -314,11 +315,11 @@ def render_attack_graph(nodes_dict, edges, nodes_meta=None, graph_height=720, ch
             node_bg = "#78350F"
             node_border = "#F59E0B"
             
-        node_highlight_bg = "#92400E" if is_chokepoint else style["highlight"]
+        node_highlight_bg = "#78350F" if is_chokepoint else style["highlight"]
         node_highlight_border = "#FBBF24" if is_chokepoint else "#FFFFFF"
-        node_border_width = 4 if is_chokepoint else 2
-        node_shadow_color = "#F59E0B" if is_chokepoint else "rgba(0,0,0,0.6)"
-        node_shadow_size = 18 if is_chokepoint else 10
+        node_border_width = 3 if is_chokepoint else 2
+        node_shadow_color = "rgba(245, 158, 11, 0.45)" if is_chokepoint else "rgba(0,0,0,0.6)"
+        node_shadow_size = 22 if is_chokepoint else 10
         node_font_color = "#FEF08A" if is_chokepoint else "#F8FAFC"
             
         vis_nodes.append({
@@ -341,13 +342,13 @@ def render_attack_graph(nodes_dict, edges, nodes_meta=None, graph_height=720, ch
             "font": {
                 "color": node_font_color,
                 "size": 11,
-                "face": "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+                "face": "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
                 "align": "center"
             },
             "shape": "box",
-            "margin": 10,
+            "margin": 12,
             "shapeProperties": {
-                "borderRadius": 6
+                "borderRadius": 8
             },
             "borderWidth": node_border_width,
             "borderWidthSelected": 4 if is_chokepoint else 3,
@@ -355,7 +356,7 @@ def render_attack_graph(nodes_dict, edges, nodes_meta=None, graph_height=720, ch
                 "enabled": True,
                 "color": node_shadow_color,
                 "size": node_shadow_size,
-                "x": 2,
+                "x": 0,
                 "y": 2
             }
         })
@@ -364,7 +365,7 @@ def render_attack_graph(nodes_dict, edges, nodes_meta=None, graph_height=720, ch
             "id": name,
             "label": label,
             "badge": style["badge"],
-            "icon": style.get("icon", ""),
+            "icon": style.get("icon", "🛡️"),
             "level": level,
             "props": props
         }
@@ -396,14 +397,15 @@ def render_attack_graph(nodes_dict, edges, nodes_meta=None, graph_height=720, ch
             "dashes": True if (is_mitigation or lbl in ["CAN_PIVOT_TO", "LATERAL_MOVEMENT"]) else False,
             "font": {
                 "size": 9,
-                "color": "#CBD5E1",
-                "background": "#070B14",
+                "color": "#94A3B8",
+                "background": "#0B1120",
                 "strokeWidth": 0,
                 "align": "horizontal"
             },
             "smooth": {
-                "type": "curvedCW",
-                "roundness": 0.14
+                "type": "cubicBezier",
+                "forceDirection": "horizontal",
+                "roundness": 0.35
             }
         })
         
@@ -639,20 +641,24 @@ def render_attack_graph(nodes_dict, edges, nodes_meta=None, graph_height=720, ch
     <body>
       <div id="graph-wrapper">
         <div class="layout-bar">
-          <button class="tool-btn active-mode" id="btn-lr" onclick="setHierarchy('LR')">Hierarchy (LR)</button>
-          <button class="tool-btn" id="btn-ud" onclick="setHierarchy('UD')">Hierarchy (UD)</button>
-          <button class="tool-btn" id="btn-force" onclick="setForceDirected()">Force-Directed</button>
-          <button class="tool-btn" id="freeze-btn" onclick="togglePhysics()">Freeze</button>
-          <button class="tool-btn" onclick="downloadGraphPNG()" title="Download High-Res Attack Graph as PNG Image">PNG</button>
-          <button class="tool-btn" onclick="downloadGraphJSON()" title="Download Topology Graph Data as JSON">JSON</button>
+          <button class="tool-btn active-mode" id="btn-lr" onclick="setHierarchy('LR')">⚡ Flow (LR)</button>
+          <button class="tool-btn" id="btn-ud" onclick="setHierarchy('UD')">⬇️ Flow (UD)</button>
+          <button class="tool-btn" id="btn-force" onclick="setForceDirected()">🕸️ Force-Directed</button>
+          <button class="tool-btn" id="freeze-btn" onclick="togglePhysics()">⏸️ Freeze</button>
+          <div class="divider"></div>
+          <button class="tool-btn" onclick="network.fit({{animation: {{duration: 350}}}})" title="Fit View to Screen">⤢ Fit</button>
+          <button class="tool-btn" onclick="network.moveTo({{scale: network.getScale() * 1.3}})" title="Zoom In (+)">➕</button>
+          <button class="tool-btn" onclick="network.moveTo({{scale: network.getScale() * 0.75}})" title="Zoom Out (-)">➖</button>
+          <div class="divider"></div>
+          <button class="tool-btn" onclick="downloadGraphPNG()" title="Download High-Res Attack Graph as PNG Image">📷 PNG</button>
+          <button class="tool-btn" onclick="downloadGraphJSON()" title="Download Topology Graph Data as JSON">📄 JSON</button>
         </div>
         <div class="zoom-toolbar">
-          <button class="zoom-btn" onclick="network.moveTo({{scale: network.getScale() * 1.35}})" title="Zoom In (+)">+</button>
-          <button class="zoom-btn" onclick="network.moveTo({{scale: network.getScale() * 0.72}})" title="Zoom Out (-)">−</button>
-          <button class="zoom-btn" onclick="network.fit({{animation: {{duration: 350}}}})" title="Reset / Fit View">FIT</button>
-          <button class="zoom-btn" onclick="downloadGraphPNG()" title="Download Graph Image (PNG)">PNG</button>
-          <button class="zoom-btn" onclick="downloadGraphJSON()" title="Download Graph JSON">JSON</button>
-          <button class="zoom-btn" id="fs-btn" onclick="toggleFullscreen()" title="Fullscreen Toggle">FULL</button>
+          <button class="zoom-btn" onclick="network.moveTo({{scale: network.getScale() * 1.3}})" title="Zoom In (+)">+</button>
+          <button class="zoom-btn" onclick="network.moveTo({{scale: network.getScale() * 0.75}})" title="Zoom Out (-)">−</button>
+          <button class="zoom-btn" onclick="network.fit({{animation: {{duration: 350}}}})" title="Reset / Fit View">⤢</button>
+          <button class="zoom-btn" onclick="downloadGraphPNG()" title="Download Graph Image (PNG)">📷</button>
+          <button class="zoom-btn" id="fs-btn" onclick="toggleFullscreen()" title="Fullscreen Toggle">⛶</button>
         </div>
         <div id="network"></div>
         <div id="hud-panel" class="tactical-hud">
@@ -688,11 +694,12 @@ def render_attack_graph(nodes_dict, edges, nodes_meta=None, graph_height=720, ch
               enabled: true,
               direction: 'LR',
               sortMethod: 'directed',
-              levelSeparation: 260,
-              nodeSpacing: 110,
-              treeSpacing: 140,
+              levelSeparation: 340,
+              nodeSpacing: 160,
+              treeSpacing: 180,
               parentCentralization: true,
-              edgeMinimization: true
+              edgeMinimization: true,
+              blockShifting: true
             }}
           }},
           physics: {{
@@ -719,11 +726,12 @@ def render_attack_graph(nodes_dict, edges, nodes_meta=None, graph_height=720, ch
                 enabled: true,
                 direction: dir,
                 sortMethod: 'directed',
-                levelSeparation: dir === 'LR' ? 260 : 130,
-                nodeSpacing: dir === 'LR' ? 110 : 220,
-                treeSpacing: 150,
+                levelSeparation: dir === 'LR' ? 340 : 190,
+                nodeSpacing: dir === 'LR' ? 160 : 260,
+                treeSpacing: dir === 'LR' ? 180 : 220,
                 parentCentralization: true,
-                edgeMinimization: true
+                edgeMinimization: true,
+                blockShifting: true
               }}
             }},
             physics: {{ enabled: false }}
@@ -743,10 +751,10 @@ def render_attack_graph(nodes_dict, edges, nodes_meta=None, graph_height=720, ch
               enabled: true,
               solver: 'forceAtlas2Based',
               forceAtlas2Based: {{
-                gravitationalConstant: -75,
-                centralGravity: 0.015,
-                springLength: 180,
-                springConstant: 0.08,
+                gravitationalConstant: -80,
+                centralGravity: 0.012,
+                springLength: 240,
+                springConstant: 0.07,
                 damping: 0.45,
                 avoidOverlap: 1.0
               }},
@@ -2895,40 +2903,70 @@ with container_graph:
                         st.rerun()
 
                 st.markdown("##### Deployable SecOps Defense Artifacts")
-                tab_sig, tab_k8s, tab_sh = st.tabs(["Sigma Rule (YAML)", "Kubernetes Policy (YAML)", "Quarantine Script (Bash)"])
+                tab_sig, tab_k8s, tab_sh, tab_suricata, tab_splunk = st.tabs([
+                    "Sigma Rule (SIEM)",
+                    "Kubernetes Policy (K8s)",
+                    "Quarantine Script (Bash)",
+                    "Suricata IDS (Network)",
+                    "Splunk SPL (Threat Hunt)"
+                ])
+                
+                clean_filename_target = cm['target_entity'].replace(':', '_').replace('/', '_').replace(' ', '_')
                 
                 with tab_sig:
-                    st.caption("Standardized Sigma detection rule for SIEM ingestion (Splunk, Microsoft Sentinel, Elastic, QRadar).")
+                    st.caption("Standardized multi-source Sigma detection rule for SIEM ingestion (Splunk, Microsoft Sentinel, Elastic, QRadar, Chronicle).")
                     st.code(cm["defense_artifacts"]["sigma_rule"], language="yaml")
                     st.download_button(
                         "Download Sigma Rule (.yml)",
                         data=cm["defense_artifacts"]["sigma_rule"],
-                        file_name=f"sigma_detect_{cm['target_entity'].replace(':', '_').replace('/', '_')}.yml",
+                        file_name=f"sigma_detect_{clean_filename_target}.yml",
                         mime="text/yaml",
                         use_container_width=True,
                         key="dl_cm_sigma"
                     )
                 with tab_k8s:
-                    st.caption("Zero-Trust Kubernetes NetworkPolicy restricting lateral network sockets to/from the compromised pod.")
+                    st.caption("Zero-Trust Kubernetes NetworkPolicy restricting lateral network sockets to/from the compromised pod while preserving DNS and telemetry channels.")
                     st.code(cm["defense_artifacts"]["kubernetes_policy"], language="yaml")
                     st.download_button(
                         "Download NetworkPolicy (.yaml)",
                         data=cm["defense_artifacts"]["kubernetes_policy"],
-                        file_name=f"k8s_isolate_{cm['target_entity'].replace(':', '_').replace('/', '_')}.yaml",
+                        file_name=f"k8s_isolate_{clean_filename_target}.yaml",
                         mime="text/yaml",
                         use_container_width=True,
                         key="dl_cm_k8s"
                     )
                 with tab_sh:
-                    st.caption("Automated bash incident response playbook executing pod cordoning, iptables severing, and forensic labeling.")
+                    st.caption("Automated bash incident response playbook executing node cordoning, volatile RAM acquisition, iptables socket severing, cgroup throttling, and SOC webhook alerting.")
                     st.code(cm["defense_artifacts"]["quarantine_script"], language="bash")
                     st.download_button(
                         "Download Quarantine Script (.sh)",
                         data=cm["defense_artifacts"]["quarantine_script"],
-                        file_name=f"quarantine_{cm['target_entity'].replace(':', '_').replace('/', '_')}.sh",
+                        file_name=f"quarantine_{clean_filename_target}.sh",
                         mime="text/x-sh",
                         use_container_width=True,
                         key="dl_cm_sh"
+                    )
+                with tab_suricata:
+                    st.caption("High-performance Suricata 6.x/7.x & Snort 3 Network IDS inspection rules matching exploit payloads, reverse shell egress, and East-West lateral pivots.")
+                    st.code(cm["defense_artifacts"].get("suricata_rule", "# Suricata rule unavailable"), language="yaml")
+                    st.download_button(
+                        "Download Suricata Rules (.rules)",
+                        data=cm["defense_artifacts"].get("suricata_rule", ""),
+                        file_name=f"suricata_{clean_filename_target}.rules",
+                        mime="text/plain",
+                        use_container_width=True,
+                        key="dl_cm_suricata"
+                    )
+                with tab_splunk:
+                    st.caption("Multi-stage Splunk SPL threat hunting query correlating web ingress exploit attempts, process execution, and suspicious egress sockets.")
+                    st.code(cm["defense_artifacts"].get("splunk_query", "# Splunk query unavailable"), language="sql")
+                    st.download_button(
+                        "Download Splunk SPL Query (.spl)",
+                        data=cm["defense_artifacts"].get("splunk_query", ""),
+                        file_name=f"splunk_hunt_{clean_filename_target}.spl",
+                        mime="text/plain",
+                        use_container_width=True,
+                        key="dl_cm_splunk"
                     )
     else:
         st.info("Execute a threat scenario on the left to visualize the attack path and lateral movement graph.")
